@@ -14,6 +14,24 @@ This notebook performs a comprehensive exploratory data analysis on Japan's Cons
 
 $$\text{Growth Rate}_t = \left(\frac{P_t}{P_{t-3}} - 1\right) \times \frac{12}{3} \times 100$$
 
+### Missing Value Analysis
+
+Of the 57 CPI sub-components, **52 have complete data** (Jan 1970 – Jan 2026). The remaining 5 series begin later because they were not tracked in earlier decades:
+
+| Series | Available from | Missing months | Missing % |
+|--------|---------------|---------------|-----------|
+| Expenses for information & communication | 2005-01 | 420 | 62.4% |
+| Water & sewerage charges | 1985-01 | 180 | 26.7% |
+| Expenses for culture & recreation | 1980-01 | 120 | 17.8% |
+| Tutorial fees | 1976-01 | 72 | 10.7% |
+| Expenses for education | 1975-01 | 60 | 8.9% |
+
+**Total missing in raw CPI levels:** 852 cells (out of 673 × 57 = 38,361).
+
+After computing 3-month annualized growth rates, an additional 3 observations per series become `NaN` (lag-induced), bringing the **total missing in the growth rate matrix to 1,023**.
+
+**Handling:** Raw `'-'` values are replaced with `NaN` and coerced to numeric. Each statistical test and visualization applies `.dropna()` per-series before computation, so results reflect only valid observations.
+
 ## Analysis Sections
 
 ### 1. Descriptive Statistics

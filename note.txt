@@ -1,0 +1,33 @@
+DATA ISSUES
+
+(1) original weights? solved
+    - earlier version didn't seperate aggregate (cpi - rent) from components
+    - some double counting 
+(2) time series without rent breakdown (imputed rent)
+
+
+
+MODEL ISSUES
+1. Rent included as a regular component — the main failure
+
+Rent (18.33% basket, σ=1.09) got 57.6% optimized weight. Effective number of components was 2.9 out of 51. The model reduced to essentially "Rent + a handful of food items." OOS R² = 0.055, worse real-time tracking than off-the-shelf core CPI. This single issue breaks the model.
+
+2. The shrinkw penalty makes it worse, not better
+
+The v2 improvement — weighting the penalty by each component's standard deviation — was supposed to match the R paper. But it backfires in Japan:
+
+
+penalty_i = λ × σ(X_i) × (w_i − w_prior_i)²
+Rent has σ = 1.09. Fruits has σ = 34.5. So deviating from Rent's prior is 31× cheaper than deviating from Fruits' prior. The "improvement" actually makes it easier for the optimizer to dump weight on the most stable, least informative component.
+
+3. Four double-counting columns included
+
+Energy, Expenses for education, Expenses for culture & recreation, Expenses for information & communication were included alongside the individual components. Energy for example overlaps with Electricity + Gas + Other fuel + part of Private transportation. That's 51 inputs instead of 46 clean ones.
+
+4. OOS evaluation was too sparse
+
+Only 16 out-of-sample predictions were generated over 181 eligible periods, because step_size=12. That's one prediction per year — far too few to say anything reliable about OOS performance. Should be step_size of 1 or 3.
+
+5. The lambda grid was anchored on a narrow preliminary CV
+
+The preliminary CV used 10 log-spaced values from e⁻³ to e² (≈ 0.05 to 7.4). If the true optimal lambda sits outside that range, the final grid is anchored wrong from the start. The best lambda always came back as the smallest value in the prelim grid (0.46), which is a sign the prelim range was too narrow on the low end.

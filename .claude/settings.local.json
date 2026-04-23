@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python cpi_analysis.py)",
+      "Bash(python regression.py)"
+    ]
+  }
+}

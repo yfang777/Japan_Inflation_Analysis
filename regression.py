@@ -49,7 +49,7 @@ MIN_TRAIN   = 120                    # 10-year minimum OOS training window
 OOS_STEP    = 1                      # rolling step size (months)
 N_CV_FOLDS     = 10
 LAMBDA_GRID       = np.logspace(-4, 3, 40) # comps: penalises deviation from basket prior
-LAMBDA_GRID_RANKS = np.logspace(-2, 6, 40) # ranks: penalises non-smoothness across ranks
+LAMBDA_GRID_RANKS = np.logspace(0, 5, 40)  # ranks: penalises non-smoothness across ranks
 ROLLING_WINDOW    = 240                    # 20-year rolling window (paper's default)
 
 
@@ -406,6 +406,55 @@ def compute_benchmarks(growth: pd.DataFrame,
     return pd.DataFrame(bm)
 
 
+def compute_mean_benchmark(y: np.ndarray, dates: pd.DatetimeIndex,
+                           oos_dates: pd.DatetimeIndex,
+                           min_train: int = MIN_TRAIN) -> pd.Series:
+    """
+    Unconditional mean benchmark: predict mean(y[0:t]) at each OOS step.
+    This is the R²=0 floor — any model that can't beat this is useless.
+    """
+    records = []
+    for t, date in enumerate(dates):
+        if date not in oos_dates:
+            continue
+        idx = np.where(dates == date)[0][0]
+        records.append({'date': date, 'predicted': float(y[:idx].mean())})
+    return pd.DataFrame(records).set_index('date')['predicted']
+
+
+def compute_ols_benchmark(growth: pd.DataFrame, y: np.ndarray,
+                          dates: pd.DatetimeIndex,
+                          oos_dates: pd.DatetimeIndex,
+                          min_train: int = MIN_TRAIN) -> pd.Series:
+    """
+    OLS regression benchmark — the paper's Xbm_t.
+
+    At each OOS step t, fit OLS on expanding window:
+        y = a + b1*headline + b2*core_ex_ff + b3*core_ex_fe + eps
+    Then predict y[t] using current-period rates. Intercept captures long-run mean.
+    """
+    col_map = {
+        'headline': 'All items',
+        'core_ff':  'All items, less fresh food',
+        'core_fe':  'All items, less food (less alcoholic beverages) and energy',
+    }
+    # build feature matrix aligned to dates
+    X_bm = np.column_stack([
+        growth[col].reindex(dates).ffill().values
+        for col in col_map.values()
+    ])
+
+    records = []
+    for date in oos_dates:
+        t = np.where(dates == date)[0][0]
+        if t < min_train:
+            continue
+        X_tr, y_tr = X_bm[:t], y[:t]
+        beta, *_ = np.linalg.lstsq(X_tr, y_tr, rcond=None)
+        records.append({'date': date, 'predicted': float(X_bm[t] @ beta)})
+    return pd.DataFrame(records).set_index('date')['predicted']
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  EVALUATION
 # ══════════════════════════════════════════════════════════════════════════════
@@ -688,6 +737,9 @@ def main() -> None:
     # ── benchmarks ────────────────────────────────────────────────────────────
     print('\nComputing benchmarks...')
     bm_df = compute_benchmarks(growth, oos_exp_df.index)
+    bm_df['Unconditional mean'] = compute_mean_benchmark(y, dates, oos_exp_df.index)
+    bm_df['OLS (headline+core+supercore)'] = compute_ols_benchmark(
+        growth, y, dates, oos_exp_df.index)
 
     extra_oos = {
         'Comps (rolling 20y)': oos_roll_df,

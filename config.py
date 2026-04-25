@@ -6,6 +6,7 @@ The analysis script imports from this file so structural changes stay in one pla
 """
 
 from pathlib import Path
+import numpy as np
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 ROOT        = Path(__file__).parent
@@ -209,4 +210,31 @@ GROUP_COLORS = {
     'Recreation':      '#16a085',
     'Other':           '#7f8c8d',
     'Rent':            '#8e44ad',   # for isolated display only
+}
+
+# ── derived lookups ──────────────────────────────────────────────────────────
+COL_TO_GROUP = {col: grp for grp, cols in GROUPS.items() for col in cols}
+
+# ── regression feature set ───────────────────────────────────────────────────
+# 46 clean components + Rent (isolated but included for comparison)
+FEATURES = COMPONENT_COLS + ['Rent']
+
+# ── regression run settings ──────────────────────────────────────────────────
+START_DATE        = '1990-01-01'
+HORIZON           = 12                        # months ahead
+MIN_TRAIN         = 120                       # 10-year minimum OOS training window
+OOS_STEP          = 1                         # rolling step size (months)
+N_CV_FOLDS        = 10
+LAMBDA_GRID       = np.logspace(-4, 3, 40)    # comps: penalises deviation from basket prior
+LAMBDA_GRID_RANKS = np.logspace(0, 5, 40)     # ranks: penalises non-smoothness across ranks
+ROLLING_WINDOW    = 240                       # 20-year rolling window (paper's default)
+
+# ── matplotlib defaults ──────────────────────────────────────────────────────
+MPL_RCPARAMS = {
+    'figure.dpi': 150,
+    'axes.spines.top': False,
+    'axes.spines.right': False,
+    'axes.grid': True,
+    'grid.alpha': 0.3,
+    'font.size': 10,
 }

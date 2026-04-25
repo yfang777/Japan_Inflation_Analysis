@@ -149,3 +149,6 @@ Thumbs.db
 # uv
 .uv
 # uv.lock
+
+# Claude Code
+.claude/

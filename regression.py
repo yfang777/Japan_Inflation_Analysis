@@ -47,8 +47,10 @@ START_DATE  = '1990-01-01'
 HORIZON     = 12                     # months ahead
 MIN_TRAIN   = 120                    # 10-year minimum OOS training window
 OOS_STEP    = 1                      # rolling step size (months)
-N_CV_FOLDS  = 10
-LAMBDA_GRID = np.logspace(-4, 3, 40) # single-stage, wide range
+N_CV_FOLDS     = 10
+LAMBDA_GRID       = np.logspace(-4, 3, 40) # comps: penalises deviation from basket prior
+LAMBDA_GRID_RANKS = np.logspace(-2, 6, 40) # ranks: penalises non-smoothness across ranks
+ROLLING_WINDOW    = 240                    # 20-year rolling window (paper's default)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -229,6 +231,79 @@ def train(X: np.ndarray, y: np.ndarray, w_prior: np.ndarray,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  ALBACORERANKS  –  rank-space assemblage (supervised trimming)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Instead of weighting components by identity, sort them low→high at each t
+# and learn which percentile of the distribution is predictive of future
+# headline inflation. Fused-ridge penalty encourages smooth weights across
+# adjacent ranks. Mean constraint replaces sum-to-1.
+
+def build_rank_matrix(X: np.ndarray) -> np.ndarray:
+    """Sort component growth rates low→high at each t. Shape unchanged (T, K)."""
+    return np.sort(X, axis=1)
+
+
+def _fit_ranks_single(O: np.ndarray, y: np.ndarray, lam: float) -> dict:
+    """
+    Assemblage in rank space.
+
+    min_w  mean(y − Ow)²  +  λ Σ(w_{r+1} − w_r)²   [fused ridge]
+    s.t.   w ≥ 0,  Ō'w = ȳ   [mean constraint, not sum-to-1]
+    """
+    K      = O.shape[1]
+    O_mean = O.mean(axis=0)
+    y_mean = float(y.mean())
+
+    def objective(w):
+        return np.mean((y - O @ w) ** 2) + lam * float(np.sum(np.diff(w) ** 2))
+
+    res = minimize(
+        objective,
+        x0=np.ones(K) / K,
+        method='SLSQP',
+        bounds=[(0, None)] * K,
+        constraints={'type': 'eq', 'fun': lambda w: float(O_mean @ w) - y_mean},
+        options={'maxiter': 2000, 'ftol': 1e-10},
+    )
+    w     = res.x
+    y_hat = O @ w
+    ss_r  = np.sum((y - y_hat) ** 2)
+    ss_t  = np.sum((y - y.mean()) ** 2)
+    return {
+        'weights':   w,
+        'fitted':    y_hat,
+        'lambda':    lam,
+        'rmse':      float(np.sqrt(np.mean((y - y_hat) ** 2))),
+        'r2':        float(1 - ss_r / ss_t) if ss_t > 0 else 0.0,
+        'n_nonzero': int((w > 1e-4).sum()),
+        'converged': res.success,
+    }
+
+
+def _cv_mses_ranks(O: np.ndarray, y: np.ndarray,
+                   lambdas: np.ndarray,
+                   n_folds: int = N_CV_FOLDS) -> np.ndarray:
+    """Expanding-window CV for rank-space model."""
+    n         = len(y)
+    min_tr    = n // (n_folds + 1)
+    fold_size = n // n_folds
+    mse_mat   = np.full((len(lambdas), n_folds), np.nan)
+
+    for li, lam in enumerate(lambdas):
+        for f in range(n_folds):
+            t_end  = min_tr + f * fold_size
+            t_test = min(t_end + fold_size, n)
+            if t_end >= n:
+                continue
+            r  = _fit_ranks_single(O[:t_end], y[:t_end], lam)
+            pv = O[t_end:t_test] @ r['weights']
+            mse_mat[li, f] = np.mean((y[t_end:t_test] - pv) ** 2)
+
+    return np.nanmean(mse_mat, axis=1)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  OUT-OF-SAMPLE EVALUATION
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -236,16 +311,17 @@ def rolling_oos(X: np.ndarray, y: np.ndarray,
                 w_prior: np.ndarray, dates: pd.DatetimeIndex,
                 min_train: int = MIN_TRAIN,
                 step: int = OOS_STEP,
-                lambdas: np.ndarray = LAMBDA_GRID) -> tuple:
+                lambdas: np.ndarray = LAMBDA_GRID,
+                window: int = None) -> tuple:
     """
-    Rolling OOS with expanding training window.
+    Rolling OOS for Albacorecomps.
 
-    Lambda is selected once using only data up to min_train — no look-ahead.
-    The model is refit at every step (same lambda, growing data).
-
+    Lambda fixed from first min_train months — no look-ahead.
+    window=None → expanding (all history); window=240 → rolling 20-year.
     Returns (oos_df, oos_lambda).
     """
-    print(f'\n  Selecting OOS lambda from first {min_train} months...')
+    win_str = f'rolling {window}m' if window else 'expanding'
+    print(f'\n  Selecting OOS lambda from first {min_train} months [{win_str}]...')
     cv_mse     = _cv_mses(X[:min_train], y[:min_train], lambdas, w_prior, n_folds=5)
     oos_lambda = lambdas[int(np.argmin(cv_mse))]
     print(f'  OOS λ = {oos_lambda:.5f}')
@@ -253,8 +329,9 @@ def rolling_oos(X: np.ndarray, y: np.ndarray,
     steps   = range(min_train, len(X), step)
     records = []
     for i, t in enumerate(steps):
-        r      = _fit_single(X[:t], y[:t], oos_lambda, w_prior)
-        y_pred = float(X[t] @ r['weights'])
+        t_start = max(0, t - window) if window else 0
+        r       = _fit_single(X[t_start:t], y[t_start:t], oos_lambda, w_prior)
+        y_pred  = float(X[t] @ r['weights'])
         records.append({'date': dates[t], 'actual': y[t], 'predicted': y_pred})
         if (i + 1) % 60 == 0:
             print(f'    {i+1}/{len(steps)} ...')
@@ -262,6 +339,43 @@ def rolling_oos(X: np.ndarray, y: np.ndarray,
     df_oos           = pd.DataFrame(records).set_index('date')
     df_oos['error']  = df_oos['predicted'] - df_oos['actual']
     print(f'  OOS complete: {len(df_oos)} predictions')
+    return df_oos, oos_lambda
+
+
+def rolling_oos_ranks(X: np.ndarray, y: np.ndarray,
+                      dates: pd.DatetimeIndex,
+                      min_train: int = MIN_TRAIN,
+                      step: int = OOS_STEP,
+                      lambdas: np.ndarray = LAMBDA_GRID_RANKS,
+                      window: int = ROLLING_WINDOW) -> tuple:
+    """
+    Rolling OOS for Albacoreranks (rank-space assemblage).
+
+    Builds order-statistic matrix O from X, then runs rank-space model
+    with fused-ridge penalty and rolling window.
+    Lambda fixed from first min_train months — no look-ahead.
+    Returns (oos_df, oos_lambda).
+    """
+    O = build_rank_matrix(X)
+    win_str = f'rolling {window}m' if window else 'expanding'
+    print(f'\n  [Ranks] Selecting OOS lambda from first {min_train} months [{win_str}]...')
+    cv_mse     = _cv_mses_ranks(O[:min_train], y[:min_train], lambdas, n_folds=5)
+    oos_lambda = lambdas[int(np.argmin(cv_mse))]
+    print(f'  [Ranks] OOS λ = {oos_lambda:.5f}')
+
+    steps   = range(min_train, len(O), step)
+    records = []
+    for i, t in enumerate(steps):
+        t_start = max(0, t - window) if window else 0
+        r       = _fit_ranks_single(O[t_start:t], y[t_start:t], oos_lambda)
+        y_pred  = float(O[t] @ r['weights'])
+        records.append({'date': dates[t], 'actual': y[t], 'predicted': y_pred})
+        if (i + 1) % 60 == 0:
+            print(f'    {i+1}/{len(steps)} ...')
+
+    df_oos           = pd.DataFrame(records).set_index('date')
+    df_oos['error']  = df_oos['predicted'] - df_oos['actual']
+    print(f'  [Ranks] OOS complete: {len(df_oos)} predictions')
     return df_oos, oos_lambda
 
 
@@ -310,30 +424,40 @@ def _metrics(actual: np.ndarray, predicted: np.ndarray) -> dict:
 
 
 def print_scorecard(insample: dict, oos_df: pd.DataFrame,
-                    bm_df: pd.DataFrame) -> None:
+                    bm_df: pd.DataFrame,
+                    extra_oos: dict = None) -> None:
+    """
+    extra_oos : dict of {label: oos_DataFrame} for additional models
+                (e.g. rolling-window assemblage, Albacoreranks).
+    """
     actual = oos_df['actual'].values
 
     print('\n' + '=' * 65)
     print('RESULTS SCORECARD')
     print('=' * 65)
 
-    print(f'\n  In-sample (full 1990–present training):')
-    print(f'    RMSE:            {insample["rmse"]:.4f}')
-    print(f'    MAE:             {insample["mae"]:.4f}')
-    print(f'    R2:              {insample["r2"]:.4f}')
-    print(f'    Non-zero weights:{insample["n_nonzero"]}/{len(FEATURES)}')
-    print(f'    Lambda:          {insample["best_lambda"]:.5f}')
+    print(f'\n  In-sample (full data, Albacorecomps):')
+    print(f'    RMSE:             {insample["rmse"]:.4f}')
+    print(f'    MAE:              {insample["mae"]:.4f}')
+    print(f'    R2:               {insample["r2"]:.4f}')
+    print(f'    Non-zero weights: {insample["n_nonzero"]}/{len(FEATURES)}')
+    print(f'    Lambda:           {insample["best_lambda"]:.5f}')
 
-    print(f'\n  Out-of-sample (rolling, step={OOS_STEP}, n={len(oos_df)}):')
-    rows = [('Assemblage', _metrics(actual, oos_df['predicted'].values))]
+    print(f'\n  Out-of-sample (step={OOS_STEP}, n={len(oos_df)}):')
+    rows = [('Comps (expanding)', _metrics(actual, oos_df['predicted'].values))]
+    if extra_oos:
+        for label, df in extra_oos.items():
+            pred = df['predicted'].reindex(oos_df.index).values
+            rows.append((label, _metrics(actual, pred)))
     for col in bm_df.columns:
         rows.append((col, _metrics(actual, bm_df[col].values)))
 
-    print(f'  {"Model":<28}  {"RMSE":>7}  {"MAE":>7}  {"R2":>7}')
-    print('  ' + '-' * 55)
+    our_models = {'Comps (expanding)', 'Comps (rolling 20y)', 'Ranks (rolling 20y)'}
+    print(f'  {"Model":<30}  {"RMSE":>7}  {"MAE":>7}  {"R2":>7}')
+    print('  ' + '-' * 57)
     for name, m in rows:
-        marker = ' <--' if name == 'Assemblage' else ''
-        print(f'  {name:<28}  {m["RMSE"]:>7.4f}  {m["MAE"]:>7.4f}  {m["R2"]:>7.4f}{marker}')
+        marker = ' <--' if name in our_models else ''
+        print(f'  {name:<30}  {m["RMSE"]:>7.4f}  {m["MAE"]:>7.4f}  {m["R2"]:>7.4f}{marker}')
 
     print('=' * 65 + '\n')
 
@@ -426,7 +550,27 @@ def fig_insample(result: dict, dates: pd.DatetimeIndex,
     return fig
 
 
-def fig_oos(oos_df: pd.DataFrame, bm_df: pd.DataFrame) -> plt.Figure:
+def fig_ranks_weights(weights: np.ndarray, lam: float) -> plt.Figure:
+    """Weight assigned to each rank (rank 1 = lowest 3m/3m, rank K = highest)."""
+    K     = len(weights)
+    ranks = np.arange(1, K + 1)
+
+    fig, ax = plt.subplots(figsize=(11, 4))
+    ax.bar(ranks, weights * 100, color='#3498db', edgecolor='white', linewidth=0.4)
+    ax.axhline(100 / K, color='#e74c3c', lw=1.5, linestyle='--',
+               label=f'Uniform 1/K = {100/K:.1f}%')
+    ax.set_xlabel('Rank (1 = lowest 3m/3m component, K = highest)')
+    ax.set_ylabel('Weight (%)')
+    ax.set_title(f'Albacoreranks: Weight by Rank Position  |  λ = {lam:.4f}',
+                 fontweight='bold')
+    ax.legend(frameon=False)
+    fig.tight_layout()
+    _save(fig, 'reg_fig5_ranks_weights.png')
+    return fig
+
+
+def fig_oos(oos_df: pd.DataFrame, bm_df: pd.DataFrame,
+            extra_oos: dict = None) -> plt.Figure:
     """OOS predictions vs. benchmarks vs. actual."""
     actual = oos_df['actual']
 
@@ -438,12 +582,22 @@ def fig_oos(oos_df: pd.DataFrame, bm_df: pd.DataFrame) -> plt.Figure:
 
     fig, axes = plt.subplots(2, 1, figsize=(13, 9), sharex=True)
 
+    extra_styles = {
+        'Comps (rolling 20y)': ('#e74c3c', '--', 1.5),
+        'Ranks (rolling 20y)': ('#8e44ad', '-',  1.8),
+    }
+
     # top panel: time series
     ax = axes[0]
     ax.plot(actual.index, actual.values,
             color='#2c3e50', lw=2.2, label='Actual (12m fwd)')
     ax.plot(oos_df.index, oos_df['predicted'].values,
-            color='#e74c3c', lw=1.8, label='Assemblage (OOS)')
+            color='#e74c3c', lw=1.5, linestyle=':', label='Comps (expanding)')
+    if extra_oos:
+        for name, df in extra_oos.items():
+            c, ls, lw = extra_styles.get(name, ('#7f8c8d', '--', 1.2))
+            ax.plot(df.index, df['predicted'].values, color=c, linestyle=ls,
+                    lw=lw, label=name)
     for name, (c, ls, lw) in bm_styles.items():
         if name in bm_df.columns:
             ax.plot(bm_df.index, bm_df[name].values,
@@ -458,8 +612,12 @@ def fig_oos(oos_df: pd.DataFrame, bm_df: pd.DataFrame) -> plt.Figure:
     ax = axes[1]
     window = 36
     series_list = [
-        ('Assemblage', oos_df['predicted'], '#e74c3c', '-',  1.8),
+        ('Comps (expanding)', oos_df['predicted'], '#e74c3c', ':',  1.5),
     ]
+    if extra_oos:
+        for name, df in extra_oos.items():
+            c, ls, lw = extra_styles.get(name, ('#7f8c8d', '--', 1.2))
+            series_list.append((name, df['predicted'], c, ls, lw))
     for name, (c, ls, lw) in bm_styles.items():
         if name in bm_df.columns:
             series_list.append((name, bm_df[name], c, ls, lw))
@@ -515,23 +673,43 @@ def main() -> None:
         print(f'    {FEATURES[i]:<45}  opt={insample["weights"][i]*100:.2f}%'
               f'  prior={w_prior[i]*100:.2f}%')
 
-    # ── out-of-sample ─────────────────────────────────────────────────────────
-    print('\n[4/5] Rolling out-of-sample evaluation...')
-    oos_df, oos_lam = rolling_oos(X, y, w_prior, dates)
+    # ── out-of-sample: comps expanding ───────────────────────────────────────
+    print('\n[4/6] Albacorecomps – expanding window...')
+    oos_exp_df, _ = rolling_oos(X, y, w_prior, dates, window=None)
+
+    # ── out-of-sample: comps rolling ──────────────────────────────────────────
+    print('\n[5/6] Albacorecomps – rolling 20-year window...')
+    oos_roll_df, _ = rolling_oos(X, y, w_prior, dates, window=ROLLING_WINDOW)
+
+    # ── out-of-sample: ranks rolling ──────────────────────────────────────────
+    print('\n[6/6] Albacoreranks – rolling 20-year window...')
+    oos_ranks_df, ranks_lam = rolling_oos_ranks(X, y, dates)
 
     # ── benchmarks ────────────────────────────────────────────────────────────
-    print('\n[5/5] Computing benchmarks...')
-    bm_df = compute_benchmarks(growth, oos_df.index)
+    print('\nComputing benchmarks...')
+    bm_df = compute_benchmarks(growth, oos_exp_df.index)
+
+    extra_oos = {
+        'Comps (rolling 20y)': oos_roll_df,
+        'Ranks (rolling 20y)': oos_ranks_df,
+    }
 
     # ── scorecard ─────────────────────────────────────────────────────────────
-    print_scorecard(insample, oos_df, bm_df)
+    print_scorecard(insample, oos_exp_df, bm_df, extra_oos=extra_oos)
+
+    # ── in-sample rank weights (last full window) ─────────────────────────────
+    O_full     = build_rank_matrix(X)
+    t_start    = max(0, len(X) - ROLLING_WINDOW)
+    r_ranks_is = _fit_ranks_single(O_full[t_start:], y[t_start:], ranks_lam)
+    print(f'  Ranks in-sample R2 (last window): {r_ranks_is["r2"]:.4f}')
 
     # ── figures ───────────────────────────────────────────────────────────────
-    print('Generating figures...')
+    print('\nGenerating figures...')
     fig_weights(insample, w_prior)
     fig_lambda_cv(insample)
     fig_insample(insample, dates, y)
-    fig_oos(oos_df, bm_df)
+    fig_oos(oos_exp_df, bm_df, extra_oos=extra_oos)
+    fig_ranks_weights(r_ranks_is['weights'], ranks_lam)
 
     print(f'\nDone. Figures saved to {PLOTS_DIR.resolve()}')
     plt.show()

@@ -31,6 +31,42 @@ The `level_3.csv` file has garbled column names. To fix:
 
 The mapping was translated from row 3 of `japan_cpi_level3.xlsx` (Japanese official names). Some items appear twice in the hierarchy (e.g. Milk at serial 069 and 070) — these are parent/child with the same name; disambiguate by serial number if needed.
 
+## `level3.csv` (cleaned)
+
+A cleaned version of `level_3.csv` with 639 columns (vs 745 in the original). **106 columns were removed** — these are aggregate/category headers, reprints, and derived indices that are not individual item-level series.
+
+### Removed columns (106)
+
+**Food category aggregates:**
+Food, Cereals, Fish & seafood, Fresh fish & seafood, Meats, Fresh meat, Dairy products & eggs, Milk & dairy products, Vegetables & seaweeds, Fresh vegetables, Dried & processed vegetables, Dried goods & seaweed, Fruits, Fresh fruits, Oils, fats & seasonings, Seasonings, Cakes & candies, Cooked food, Staple cooked food, Other cooked food, Beverages, Tea, Coffee & cocoa, Other beverages, Alcoholic beverages, Meals outside the home, General dining out
+
+**Housing & utilities aggregates:**
+Housing, Rent, Imputed rent (x2), Repairs & maintenance, Construction & other services, Fuel, light & water charges, Electricity (x2), Gas charges, Other fuel & light, Water & sewerage charges
+
+**Household goods aggregates:**
+Furniture & household utensils, Household durable goods, Household durable appliances, Interior furnishings, Bedding, Domestic utensils, Domestic non-durable goods, Domestic services
+
+**Clothing aggregates:**
+Clothing & footwear, Clothes, Western clothing, Women's clothing, Shirts, sweaters & underwear, Shirts & sweaters, Footwear, Other clothing, Services related to clothing
+
+**Medical aggregates:**
+Medical care, Medicines & health supplements, Medical supplies & appliances, Medical services, Medical consultation
+
+**Transport & communication aggregates:**
+Transportation & communication, Public transportation, Private transportation, Automobiles, Vehicle maintenance
+
+**Education aggregates:**
+Education, School fees, Tutorial fees
+
+**Culture & recreation aggregates:**
+Culture & recreation, Recreational durable goods, Recreational goods, Other recreational goods, Books & other reading materials, Newspaper, Recreational services, Accommodation (x2), Lesson fees, Other recreational services, Admission & game fees, Other entertainment services
+
+**Miscellaneous aggregates:**
+Miscellaneous, Personal care services, Toilet articles, Cosmetics, Personal effects, Bags, Tobacco, Other miscellaneous
+
+**Derived indices & reprints:**
+Fresh food, Fresh fish & seafood (reprint), Fresh vegetables (reprint), Fresh fruits (reprint), All items, less fresh food, Food, less fresh food, All items, less imputed rent, Housing, less imputed rent, Rent, less imputed rent, All items, less imputed rent & fresh food, Energy, All items, less fresh food and energy, All items, less food (less alcoholic beverages) and energy, Expenses for education, Expenses for culture & recreation, Expenses for information & communication
+
 ## Weights
 
 Weights are on a 10,000 scale (headline = 10,000). To get basket shares, divide by 10,000. For regression prior weights, divide each component's weight by the headline weight (10,000) and renormalise the non-headline components to sum to 1.

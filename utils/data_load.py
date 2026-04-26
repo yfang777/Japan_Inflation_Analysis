@@ -1,8 +1,8 @@
 """
 utils/data_load.py  –  centralised data loading for Japan CPI analysis
 
-Provides raw data loading, basket weight lookup, growth-rate computation,
-forward-target construction, and a one-call regression data pipeline.
+Loads level_1.csv / level_2.csv / level_3.csv, extracts embedded weights,
+computes growth rates and forward targets for regression.
 """
 
 import sys
@@ -46,7 +46,7 @@ def load_level_data(
     df : pd.DataFrame
         Datetime-indexed, all-numeric CPI index levels.
     weights : dict[str, float]
-        Column name → basket weight (out of 10 000).
+        Column name -> basket weight (out of 10 000).
     """
     path = LEVEL_DIR / f'level_{level}.csv'
     raw = pd.read_csv(path, dtype=str)
@@ -60,8 +60,10 @@ def load_level_data(
     weights_row = raw.loc[mask, cat_cols].iloc[0]
     weights = {col: float(weights_row[col]) for col in cat_cols}
 
-    # remaining rows are data
+    # remaining rows are data (drop blank trailing rows)
     data = raw.loc[~mask].copy()
+    data = data.dropna(subset=[date_col])
+    data = data[data[date_col].str.strip().astype(bool)]
     data[date_col] = pd.to_datetime(data[date_col].str.strip(), format='%Y%m')
     data = (data.set_index(date_col)
                 .replace('-', np.nan)
@@ -75,58 +77,11 @@ def load_level_data(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  BASKET WEIGHTS
-# ══════════════════════════════════════════════════════════════════════════════
-
-def load_basket_weights(features: list[str] | None = None,
-                        include_rent: bool = False) -> np.ndarray | dict[str, float]:
-    """
-    Official basket weights from the Japan Statistics Bureau.
-
-    Parameters
-    ----------
-    features : list[str] or None
-        If provided, return an ndarray of weights for these features,
-        renormalised to sum to 1 (regression use-case).
-        If None, return a dict {english_name: basket_share} for the
-        46 active components (EDA use-case).
-    include_rent : bool
-        Only used when features is None.  If True, include Rent in the dict.
-
-    Returns
-    -------
-    np.ndarray or dict[str, float]
-    """
-    ow = pd.read_csv(WEIGHTS_CSV)
-    jpn_to_raw = dict(zip(ow['Category_Name'], ow['Weight']))
-    total = jpn_to_raw['総合']
-
-    if features is not None:
-        raw = np.array([
-            jpn_to_raw.get(EN_TO_JPN.get(col, ''), np.nan)
-            for col in features
-        ])
-        if np.isnan(raw).any():
-            missing = [features[i] for i in np.where(np.isnan(raw))[0]]
-            print(f'  Warning: no official weight for {missing}; using equal fallback.')
-            raw = np.where(np.isnan(raw), np.nanmean(raw), raw)
-        shares = raw / total
-        return shares / shares.sum()
-    else:
-        cols = COMPONENT_COLS + (['Rent'] if include_rent else [])
-        return {
-            eng: jpn_to_raw[EN_TO_JPN[eng]] / total
-            for eng in cols
-            if EN_TO_JPN.get(eng) in jpn_to_raw
-        }
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 #  GROWTH RATES & TARGET
 # ══════════════════════════════════════════════════════════════════════════════
 
 def compute_growth_3m3m(df: pd.DataFrame) -> pd.DataFrame:
-    """3-month-over-3-month annualised growth rates (× 4 × 100)."""
+    """3-month-over-3-month annualised growth rates (x 4 x 100)."""
     return df.apply(lambda s: ((s / s.shift(3)) - 1) * 4 * 100)
 
 
@@ -150,38 +105,51 @@ def compute_forward_target(headline_growth: pd.Series,
 # ══════════════════════════════════════════════════════════════════════════════
 
 def prepare_regression_data(
+    level: int = 2,
     start_date: str = START_DATE,
     horizon: int = HORIZON,
-    features: list[str] = FEATURES,
-) -> tuple[np.ndarray, np.ndarray, pd.DatetimeIndex, pd.DataFrame]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str], pd.DatetimeIndex, pd.DataFrame]:
     """
-    Load raw CPI index → impute → 3m/3m growth rates → 12m forward target.
+    Load level CSV -> impute -> 3m/3m growth rates -> 12m forward target.
+
+    Parameters
+    ----------
+    level      : int        which level file to load (1, 2, or 3)
+    start_date : str        regression window start
+    horizon    : int        months-ahead target
 
     Returns
     -------
-    X      : ndarray (T, K)       component 3m/3m growth rates
-    y      : ndarray (T,)         12m forward average of headline 3m/3m
-    dates  : DatetimeIndex        corresponding dates
-    growth : DataFrame            full growth-rate frame (incl. composites for benchmarks)
+    X        : ndarray (T, K)    component 3m/3m growth rates
+    y        : ndarray (T,)      12m forward average of headline 3m/3m
+    w_prior  : ndarray (K,)      prior weights normalised to sum=1
+    features : list[str]         component column names
+    dates    : DatetimeIndex     corresponding dates
+    growth   : DataFrame         full growth-rate frame (incl. headline)
     """
-    df = load_raw_data(start_date)
+    df, weights_dict = load_level_data(level, start_date)
 
-    # columns to impute: features + benchmark composites
-    benchmark_cols = [
-        'All items',
-        'All items, less fresh food',
-        'All items, less food (less alcoholic beverages) and energy',
-    ]
-    cols_to_impute = list(dict.fromkeys(features + benchmark_cols))
-    df_imp, _ = smart_impute(df[cols_to_impute], strategy='auto', verbose=False)
+    # impute missing values
+    df_imp, _ = smart_impute(df, strategy='auto', verbose=False)
 
+    # 3m/3m growth rates
     growth = compute_growth_3m3m(df_imp)
-    target = compute_forward_target(growth['All items'], horizon)
 
-    valid = target.notna() & growth['All items'].notna()
+    # forward target from headline (first column = 'All items')
+    headline_col = df.columns[0]
+    target = compute_forward_target(growth[headline_col], horizon)
+
+    # component columns = everything except headline
+    features = [c for c in df.columns[1:]]
+
+    valid = target.notna() & growth[headline_col].notna()
     X_df = growth[features][valid]
 
     if X_df.isna().any().any():
         X_df = X_df.fillna(X_df.median())
 
-    return X_df.values, target[valid].values, X_df.index, growth
+    # prior weights from embedded Weights row, normalised to sum=1
+    w_raw = np.array([weights_dict[c] for c in features], dtype=float)
+    w_prior = w_raw / w_raw.sum()
+
+    return X_df.values, target[valid].values, w_prior, features, X_df.index, growth

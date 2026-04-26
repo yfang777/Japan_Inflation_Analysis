@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import PLOTS_DIR, FEATURES, GROUPS, GROUP_COLORS, COL_TO_GROUP, MPL_RCPARAMS
+from config import PLOTS_DIR, GROUPS, GROUP_COLORS, COL_TO_GROUP, MPL_RCPARAMS
 
 PLOTS_DIR.mkdir(exist_ok=True)
 plt.rcParams.update(MPL_RCPARAMS)
@@ -29,20 +29,25 @@ def _save(fig, name):
     print(f'  saved {name}')
 
 
-def fig_weights(result: dict, w_prior: np.ndarray) -> plt.Figure:
+def fig_weights(result: dict, w_prior: np.ndarray,
+                features: list[str] = None) -> plt.Figure:
     """Optimised weights vs. prior for each component, sorted descending."""
     w_opt   = result['weights']
     idx     = np.argsort(w_opt)[::-1]
-    labels  = [FEATURES[i] for i in idx]
+    if features is None:
+        features = [f'comp_{i}' for i in range(len(w_opt))]
+    labels  = [features[i] for i in idx]
     opt_s   = w_opt[idx]
     prior_s = w_prior[idx]
     colors  = [
-        GROUP_COLORS['Rent'] if l == 'Rent'
+        GROUP_COLORS.get('Rent', '#8e44ad') if l == 'Rent'
         else GROUP_COLORS.get(COL_TO_GROUP.get(l, 'Other'), '#7f8c8d')
         for l in labels
     ]
 
-    fig, ax = plt.subplots(figsize=(9, 13))
+    n_comps = len(labels)
+    fig_height = max(6, n_comps * 0.28)
+    fig, ax = plt.subplots(figsize=(9, fig_height))
     y_pos = np.arange(len(labels))
 
     ax.barh(y_pos, opt_s * 100, color=colors, edgecolor='white',
@@ -56,7 +61,7 @@ def fig_weights(result: dict, w_prior: np.ndarray) -> plt.Figure:
     ax.set_title(
         f'Assemblage Weights vs. Prior\n'
         f'λ = {result["best_lambda"]:.4f} | '
-        f'{result["n_nonzero"]}/{len(FEATURES)} non-zero | '
+        f'{result["n_nonzero"]}/{len(features)} non-zero | '
         f'in-sample R2 = {result["r2"]:.3f}',
         fontsize=11, fontweight='bold',
     )

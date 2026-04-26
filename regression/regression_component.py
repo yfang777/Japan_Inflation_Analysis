@@ -20,10 +20,9 @@ from scipy.optimize import minimize
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import (
-    FEATURES, START_DATE, HORIZON, MIN_TRAIN, OOS_STEP,
-    N_CV_FOLDS, LAMBDA_GRID, ROLLING_WINDOW, PLOTS_DIR,
+    MIN_TRAIN, OOS_STEP, N_CV_FOLDS, LAMBDA_GRID, ROLLING_WINDOW, PLOTS_DIR,
 )
-from utils.data_load import prepare_regression_data, load_basket_weights
+from utils.data_load import prepare_regression_data
 from regression.benchmarks import (
     compute_benchmarks, compute_mean_benchmark, compute_ols_benchmark,
 )
@@ -157,36 +156,35 @@ def rolling_oos(X: np.ndarray, y: np.ndarray,
 #  MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
-def main() -> None:
+def main(level: int = 2) -> None:
     print('=' * 65)
-    print('ALBACORECOMPS  –  Component-Space Assemblage Regression')
+    print(f'ALBACORECOMPS  –  Component-Space Assemblage (level {level})')
     print('=' * 65)
 
     # ── data ──────────────────────────────────────────────────────────────────
     print('\n[1/5] Loading and preparing data...')
-    X, y, dates, growth = prepare_regression_data()
+    X, y, w_prior, features, dates, growth = prepare_regression_data(level=level)
     print(f'  Observations: {len(y)}  ({dates[0]:%Y-%m} – {dates[-1]:%Y-%m})')
     print(f'  Features:     {X.shape[1]} components')
     print(f'  Target mean:  {y.mean():.3f}%  std: {y.std():.3f}%')
 
     # ── prior weights ─────────────────────────────────────────────────────────
-    print('\n[2/5] Loading prior weights...')
-    w_prior = load_basket_weights(FEATURES)
+    print('\n[2/5] Prior weights (from CSV)...')
     print(f'  Prior range: [{w_prior.min():.4f}, {w_prior.max():.4f}]  sum={w_prior.sum():.6f}')
     top3 = np.argsort(w_prior)[::-1][:3]
     for i in top3:
-        print(f'  Top prior: {FEATURES[i]:<45} {w_prior[i]*100:.2f}%')
+        print(f'  Top prior: {features[i]:<45} {w_prior[i]*100:.2f}%')
 
     # ── in-sample training ────────────────────────────────────────────────────
     print('\n[3/5] In-sample training (full data)...')
     insample = train(X, y, w_prior)
     print(f'  In-sample RMSE: {insample["rmse"]:.4f}  R2: {insample["r2"]:.4f}')
-    print(f'  Non-zero weights: {insample["n_nonzero"]}/{len(FEATURES)}')
+    print(f'  Non-zero weights: {insample["n_nonzero"]}/{len(features)}')
 
     top5_idx = np.argsort(insample['weights'])[::-1][:5]
     print('  Top 5 weights:')
     for i in top5_idx:
-        print(f'    {FEATURES[i]:<45}  opt={insample["weights"][i]*100:.2f}%'
+        print(f'    {features[i]:<45}  opt={insample["weights"][i]*100:.2f}%'
               f'  prior={w_prior[i]*100:.2f}%')
 
     # ── out-of-sample: expanding ──────────────────────────────────────────────
@@ -201,19 +199,18 @@ def main() -> None:
     print('\nComputing benchmarks...')
     bm_df = compute_benchmarks(growth, oos_exp_df.index)
     bm_df['Unconditional mean'] = compute_mean_benchmark(y, dates, oos_exp_df.index)
-    bm_df['OLS (headline+core+supercore)'] = compute_ols_benchmark(
-        growth, y, dates, oos_exp_df.index)
 
     extra_oos = {'Comps (rolling 20y)': oos_roll_df}
 
     # ── scorecard ─────────────────────────────────────────────────────────────
     our_models = {'Comps (expanding)', 'Comps (rolling 20y)'}
     print_scorecard(insample, oos_exp_df, bm_df,
-                    extra_oos=extra_oos, our_models=our_models)
+                    extra_oos=extra_oos, our_models=our_models,
+                    features=features)
 
     # ── figures ───────────────────────────────────────────────────────────────
     print('\nGenerating figures...')
-    fig_weights(insample, w_prior)
+    fig_weights(insample, w_prior, features=features)
     fig_lambda_cv(insample)
     fig_insample(insample, dates, y)
     fig_oos(oos_exp_df, bm_df, extra_oos=extra_oos)
@@ -222,4 +219,8 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--level', type=int, default=2, choices=[1, 2, 3])
+    args = parser.parse_args()
+    main(level=args.level)

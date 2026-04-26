@@ -22,10 +22,9 @@ from scipy.optimize import minimize
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import (
-    FEATURES, START_DATE, HORIZON, MIN_TRAIN, OOS_STEP,
-    N_CV_FOLDS, LAMBDA_GRID_RANKS, ROLLING_WINDOW, PLOTS_DIR,
+    MIN_TRAIN, OOS_STEP, N_CV_FOLDS, LAMBDA_GRID_RANKS, ROLLING_WINDOW, PLOTS_DIR,
 )
-from utils.data_load import prepare_regression_data, load_basket_weights
+from utils.data_load import prepare_regression_data
 from regression.benchmarks import (
     compute_benchmarks, compute_mean_benchmark, compute_ols_benchmark,
 )
@@ -147,14 +146,14 @@ def rolling_oos_ranks(X: np.ndarray, y: np.ndarray,
 #  MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
-def main() -> None:
+def main(level: int = 2) -> None:
     print('=' * 65)
-    print('ALBACORERANKS  –  Rank-Space Assemblage Regression')
+    print(f'ALBACORERANKS  –  Rank-Space Assemblage (level {level})')
     print('=' * 65)
 
     # ── data ──────────────────────────────────────────────────────────────────
     print('\n[1/3] Loading and preparing data...')
-    X, y, dates, growth = prepare_regression_data()
+    X, y, w_prior, features, dates, growth = prepare_regression_data(level=level)
     print(f'  Observations: {len(y)}  ({dates[0]:%Y-%m} – {dates[-1]:%Y-%m})')
     print(f'  Features:     {X.shape[1]} components')
     print(f'  Target mean:  {y.mean():.3f}%  std: {y.std():.3f}%')
@@ -173,11 +172,8 @@ def main() -> None:
     print('\n[3/3] Computing benchmarks...')
     bm_df = compute_benchmarks(growth, oos_ranks_df.index)
     bm_df['Unconditional mean'] = compute_mean_benchmark(y, dates, oos_ranks_df.index)
-    bm_df['OLS (headline+core+supercore)'] = compute_ols_benchmark(
-        growth, y, dates, oos_ranks_df.index)
 
     # ── scorecard ─────────────────────────────────────────────────────────────
-    # Build a synthetic insample dict for the scorecard
     insample_info = {
         'rmse': r_ranks_is['rmse'],
         'mae':  r_ranks_is['mae'],
@@ -185,12 +181,9 @@ def main() -> None:
         'n_nonzero': r_ranks_is['n_nonzero'],
         'best_lambda': ranks_lam,
     }
-
-    our_models = {'Comps (expanding)', 'Ranks (rolling 20y)'}
-    # Use oos_ranks_df as primary, relabel in scorecard
-    oos_for_scorecard = oos_ranks_df.copy()
-    print_scorecard(insample_info, oos_for_scorecard, bm_df,
-                    our_models={'Comps (expanding)'})
+    print_scorecard(insample_info, oos_ranks_df, bm_df,
+                    our_models={'Comps (expanding)'},
+                    features=features)
 
     # ── figures ───────────────────────────────────────────────────────────────
     print('\nGenerating figures...')
@@ -201,4 +194,8 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--level', type=int, default=2, choices=[1, 2, 3])
+    args = parser.parse_args()
+    main(level=args.level)

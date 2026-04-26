@@ -10,7 +10,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import FEATURES, OOS_STEP
+from config import OOS_STEP
 
 
 def metrics(actual: np.ndarray, predicted: np.ndarray) -> dict:
@@ -30,7 +30,8 @@ def metrics(actual: np.ndarray, predicted: np.ndarray) -> dict:
 def print_scorecard(insample: dict, oos_df: pd.DataFrame,
                     bm_df: pd.DataFrame,
                     extra_oos: dict = None,
-                    our_models: set = None) -> None:
+                    our_models: set = None,
+                    features: list[str] = None) -> None:
     """
     Print a comprehensive comparison table.
 
@@ -41,11 +42,14 @@ def print_scorecard(insample: dict, oos_df: pd.DataFrame,
     bm_df     : DataFrame of benchmark predictions aligned to oos_df.index
     extra_oos : dict of {label: oos_DataFrame} for additional models
     our_models: set of model labels to mark with '<--'
+    features  : list of feature names (for reporting n_nonzero / n_total)
     """
     actual = oos_df['actual'].values
 
     if our_models is None:
         our_models = set()
+
+    n_features = len(features) if features else insample.get('n_nonzero', '?')
 
     print('\n' + '=' * 65)
     print('RESULTS SCORECARD')
@@ -55,7 +59,7 @@ def print_scorecard(insample: dict, oos_df: pd.DataFrame,
     print(f'    RMSE:             {insample["rmse"]:.4f}')
     print(f'    MAE:              {insample["mae"]:.4f}')
     print(f'    R2:               {insample["r2"]:.4f}')
-    print(f'    Non-zero weights: {insample["n_nonzero"]}/{len(FEATURES)}')
+    print(f'    Non-zero weights: {insample["n_nonzero"]}/{n_features}')
     print(f'    Lambda:           {insample["best_lambda"]:.5f}')
 
     print(f'\n  Out-of-sample (step={OOS_STEP}, n={len(oos_df)}):')

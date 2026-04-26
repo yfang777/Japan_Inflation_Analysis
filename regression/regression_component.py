@@ -35,7 +35,8 @@ from regression.figures import fig_weights, fig_lambda_cv, fig_insample, fig_oos
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _fit_single(X: np.ndarray, y: np.ndarray,
-                lam: float, w_prior: np.ndarray) -> dict:
+                lam: float, w_prior: np.ndarray,
+                x0: np.ndarray = None) -> dict:
     """
     Fit assemblage for a single lambda.
 
@@ -49,7 +50,7 @@ def _fit_single(X: np.ndarray, y: np.ndarray,
 
     res = minimize(
         objective,
-        x0=w_prior.copy(),
+        x0=w_prior.copy() if x0 is None else x0,
         method='SLSQP',
         bounds=[(0, None)] * k,
         constraints={'type': 'eq', 'fun': lambda w: w.sum() - 1},
@@ -138,9 +139,11 @@ def rolling_oos(X: np.ndarray, y: np.ndarray,
 
     steps   = range(min_train, len(X), step)
     records = []
+    w0 = w_prior.copy()
     for i, t in enumerate(steps):
         t_start = max(0, t - window) if window else 0
-        r       = _fit_single(X[t_start:t], y[t_start:t], oos_lambda, w_prior)
+        r       = _fit_single(X[t_start:t], y[t_start:t], oos_lambda, w_prior, x0=w0)
+        w0      = r['weights']          # warm-start next iteration
         y_pred  = float(X[t] @ r['weights'])
         records.append({'date': dates[t], 'actual': y[t], 'predicted': y_pred})
         if (i + 1) % 60 == 0:

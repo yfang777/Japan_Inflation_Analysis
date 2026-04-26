@@ -117,12 +117,30 @@ def load_benchmark_series(start_date: str = START_DATE) -> pd.DataFrame:
 
     These composites exist in level_3.csv regardless of which level is
     used for the regression, so benchmarks always work.
+    Only the 3 needed columns are loaded and imputed — not the full 700+.
     """
-    df, _ = load_level_data(3, start_date)
-    df_imp, _ = smart_impute(df, strategy='auto', verbose=False)
-    growth = compute_growth_3m3m(df_imp)
-    cols = [c for c in _BENCHMARK_COLS if c in growth.columns]
-    return growth[cols]
+    path = LEVEL_DIR / 'level_3.csv'
+    raw = pd.read_csv(path, dtype=str)
+    date_col = raw.columns[0]
+
+    # keep only the columns we need
+    keep = [c for c in _BENCHMARK_COLS if c in raw.columns]
+    raw = raw[[date_col] + keep]
+
+    mask = raw[date_col].str.strip() == 'Weights'
+    data = raw.loc[~mask].copy()
+    data = data.dropna(subset=[date_col])
+    data = data[data[date_col].str.strip().astype(bool)]
+    data[date_col] = pd.to_datetime(data[date_col].str.strip(), format='%Y%m')
+    data = (data.set_index(date_col)
+                .replace('-', np.nan)
+                .apply(pd.to_numeric, errors='coerce'))
+    data.index.name = 'Date'
+    if start_date:
+        data = data[data.index >= start_date]
+
+    df_imp, _ = smart_impute(data, strategy='auto', verbose=False)
+    return compute_growth_3m3m(df_imp)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -41,7 +41,8 @@ def build_rank_matrix(X: np.ndarray) -> np.ndarray:
     return np.sort(X, axis=1)
 
 
-def _fit_ranks_single(O: np.ndarray, y: np.ndarray, lam: float) -> dict:
+def _fit_ranks_single(O: np.ndarray, y: np.ndarray, lam: float,
+                      x0: np.ndarray = None) -> dict:
     """
     Assemblage in rank space.
 
@@ -57,7 +58,7 @@ def _fit_ranks_single(O: np.ndarray, y: np.ndarray, lam: float) -> dict:
 
     res = minimize(
         objective,
-        x0=np.ones(K) / K,
+        x0=np.ones(K) / K if x0 is None else x0,
         method='SLSQP',
         bounds=[(0, None)] * K,
         constraints={'type': 'eq', 'fun': lambda w: float(O_mean @ w) - y_mean},
@@ -128,9 +129,11 @@ def rolling_oos_ranks(X: np.ndarray, y: np.ndarray,
 
     steps   = range(min_train, len(O), step)
     records = []
+    w0 = np.ones(O.shape[1]) / O.shape[1]
     for i, t in enumerate(steps):
         t_start = max(0, t - window) if window else 0
-        r       = _fit_ranks_single(O[t_start:t], y[t_start:t], oos_lambda)
+        r       = _fit_ranks_single(O[t_start:t], y[t_start:t], oos_lambda, x0=w0)
+        w0      = r['weights']          # warm-start next iteration
         y_pred  = float(O[t] @ r['weights'])
         records.append({'date': dates[t], 'actual': y[t], 'predicted': y_pred})
         if (i + 1) % 60 == 0:

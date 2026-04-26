@@ -31,7 +31,8 @@ def print_scorecard(insample: dict, oos_df: pd.DataFrame,
                     bm_df: pd.DataFrame,
                     extra_oos: dict = None,
                     our_models: set = None,
-                    features: list[str] = None) -> None:
+                    features: list[str] = None,
+                    primary_label: str = 'Comps (expanding)') -> None:
     """
     Print a comprehensive comparison table.
 
@@ -64,8 +65,6 @@ def print_scorecard(insample: dict, oos_df: pd.DataFrame,
 
     print(f'\n  Out-of-sample (step={OOS_STEP}, n={len(oos_df)}):')
 
-    # primary model
-    primary_label = 'Comps (expanding)'
     rows = [(primary_label, metrics(actual, oos_df['predicted'].values))]
 
     # extra models

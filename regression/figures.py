@@ -23,10 +23,19 @@ from config import PLOTS_DIR, GROUPS, GROUP_COLORS, COL_TO_GROUP, MPL_RCPARAMS
 PLOTS_DIR.mkdir(exist_ok=True)
 plt.rcParams.update(MPL_RCPARAMS)
 
+_active_plots_dir = PLOTS_DIR
+
+
+def set_plots_dir(path: Path) -> None:
+    """Override the output directory for all subsequent figure saves."""
+    global _active_plots_dir
+    _active_plots_dir = Path(path)
+    _active_plots_dir.mkdir(parents=True, exist_ok=True)
+
 
 def _save(fig, name):
-    fig.savefig(PLOTS_DIR / name, bbox_inches='tight')
-    print(f'  saved {name}')
+    fig.savefig(_active_plots_dir / name, bbox_inches='tight')
+    print(f'  saved {_active_plots_dir / name}')
 
 
 def fig_weights(result: dict, w_prior: np.ndarray,

@@ -13,7 +13,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import LEVEL_DIR, START_DATE, HORIZON
+from config import LEVEL_DIR, START_DATE, HORIZON, COMPOSITE_COLS, SPECIAL_COLS
 from utils.smart_imputation import smart_impute
 
 
@@ -101,6 +101,31 @@ def compute_forward_target(headline_growth: pd.Series,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  BENCHMARK SERIES
+# ══════════════════════════════════════════════════════════════════════════════
+
+_BENCHMARK_COLS = [
+    'All items',
+    'All items, less fresh food',
+    'All items, less food (less alcoholic beverages) and energy',
+]
+
+
+def load_benchmark_series(start_date: str = START_DATE) -> pd.DataFrame:
+    """
+    Return 3m/3m growth rates for headline + two core composite series.
+
+    These composites exist in level_3.csv regardless of which level is
+    used for the regression, so benchmarks always work.
+    """
+    df, _ = load_level_data(3, start_date)
+    df_imp, _ = smart_impute(df, strategy='auto', verbose=False)
+    growth = compute_growth_3m3m(df_imp)
+    cols = [c for c in _BENCHMARK_COLS if c in growth.columns]
+    return growth[cols]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  FULL REGRESSION DATA PIPELINE
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -139,8 +164,9 @@ def prepare_regression_data(
     headline_col = df.columns[0]
     target = compute_forward_target(growth[headline_col], horizon)
 
-    # component columns = everything except headline
-    features = [c for c in df.columns[1:]]
+    # component columns = everything except headline and known composites/aggregates
+    _exclude = set(COMPOSITE_COLS) | set(SPECIAL_COLS) | {headline_col}
+    features = [c for c in df.columns if c not in _exclude]
 
     valid = target.notna() & growth[headline_col].notna()
     X_df = growth[features][valid]

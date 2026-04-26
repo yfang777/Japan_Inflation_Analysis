@@ -70,12 +70,18 @@ def compute_ols_benchmark(growth: pd.DataFrame, y: np.ndarray,
     At each OOS step t, fit OLS on expanding window:
         y = b1*headline + b2*core_ex_ff + b3*core_ex_fe
     Then predict y[t] using current-period rates.
+    Returns empty Series if required columns are absent from growth.
     """
     col_map = {
         'headline': 'All items',
         'core_ff':  'All items, less fresh food',
         'core_fe':  'All items, less food (less alcoholic beverages) and energy',
     }
+    missing = [col for col in col_map.values() if col not in growth.columns]
+    if missing:
+        print(f'  [OLS benchmark] skipped — columns not found: {missing}')
+        return pd.Series(dtype=float, name='predicted')
+
     X_bm = np.column_stack([
         growth[col].reindex(dates).ffill().values
         for col in col_map.values()

@@ -24,12 +24,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
     MIN_TRAIN, OOS_STEP, N_CV_FOLDS, LAMBDA_GRID_RANKS, ROLLING_WINDOW, PLOTS_DIR,
 )
-from utils.data_load import prepare_regression_data
+from utils.data_load import prepare_regression_data, load_benchmark_series
 from regression.benchmarks import (
     compute_benchmarks, compute_mean_benchmark, compute_ols_benchmark,
 )
 from regression.evaluation import print_scorecard
-from regression.figures import fig_ranks_weights, fig_oos
+from regression.figures import fig_ranks_weights, fig_oos, set_plots_dir
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -170,8 +170,10 @@ def main(level: int = 2) -> None:
 
     # ── benchmarks ────────────────────────────────────────────────────────────
     print('\n[3/3] Computing benchmarks...')
-    bm_df = compute_benchmarks(growth, oos_ranks_df.index)
-    bm_df['Unconditional mean'] = compute_mean_benchmark(y, dates, oos_ranks_df.index)
+    bm_growth = load_benchmark_series().combine_first(growth)
+    bm_df = compute_benchmarks(bm_growth, oos_ranks_df.index)
+    bm_df['Unconditional mean']        = compute_mean_benchmark(y, dates, oos_ranks_df.index)
+    bm_df['OLS (headline+core+super)'] = compute_ols_benchmark(bm_growth, y, dates, oos_ranks_df.index)
 
     # ── scorecard ─────────────────────────────────────────────────────────────
     insample_info = {
@@ -182,11 +184,13 @@ def main(level: int = 2) -> None:
         'best_lambda': ranks_lam,
     }
     print_scorecard(insample_info, oos_ranks_df, bm_df,
-                    our_models={'Comps (expanding)'},
+                    our_models={'Ranks (rolling 20y)'},
+                    primary_label='Ranks (rolling 20y)',
                     features=features)
 
     # ── figures ───────────────────────────────────────────────────────────────
     print('\nGenerating figures...')
+    set_plots_dir(PLOTS_DIR / f'level{level}_rank')
     fig_ranks_weights(r_ranks_is['weights'], ranks_lam)
     fig_oos(oos_ranks_df, bm_df)
 

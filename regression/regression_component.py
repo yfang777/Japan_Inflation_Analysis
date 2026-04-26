@@ -22,12 +22,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
     MIN_TRAIN, OOS_STEP, N_CV_FOLDS, LAMBDA_GRID, ROLLING_WINDOW, PLOTS_DIR,
 )
-from utils.data_load import prepare_regression_data
+from utils.data_load import prepare_regression_data, load_benchmark_series
 from regression.benchmarks import (
     compute_benchmarks, compute_mean_benchmark, compute_ols_benchmark,
 )
 from regression.evaluation import print_scorecard
-from regression.figures import fig_weights, fig_lambda_cv, fig_insample, fig_oos
+from regression.figures import fig_weights, fig_lambda_cv, fig_insample, fig_oos, set_plots_dir
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -197,8 +197,10 @@ def main(level: int = 2) -> None:
 
     # ── benchmarks ────────────────────────────────────────────────────────────
     print('\nComputing benchmarks...')
-    bm_df = compute_benchmarks(growth, oos_exp_df.index)
-    bm_df['Unconditional mean'] = compute_mean_benchmark(y, dates, oos_exp_df.index)
+    bm_growth = load_benchmark_series().combine_first(growth)
+    bm_df = compute_benchmarks(bm_growth, oos_exp_df.index)
+    bm_df['Unconditional mean']        = compute_mean_benchmark(y, dates, oos_exp_df.index)
+    bm_df['OLS (headline+core+super)'] = compute_ols_benchmark(bm_growth, y, dates, oos_exp_df.index)
 
     extra_oos = {'Comps (rolling 20y)': oos_roll_df}
 
@@ -210,6 +212,7 @@ def main(level: int = 2) -> None:
 
     # ── figures ───────────────────────────────────────────────────────────────
     print('\nGenerating figures...')
+    set_plots_dir(PLOTS_DIR / f'level{level}_component')
     fig_weights(insample, w_prior, features=features)
     fig_lambda_cv(insample)
     fig_insample(insample, dates, y)

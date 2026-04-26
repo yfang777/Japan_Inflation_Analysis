@@ -1,24 +1,35 @@
 # utils/data_load.py
 
-Centralised data loading and preparation for the regression pipeline. Consolidates data I/O that was previously duplicated across scripts.
+Centralised data loading for all CPI levels. Reads level_1/2/3.csv files, extracts embedded weights, computes growth rates and forward targets.
 
 ## Functions
 
 | Function | Returns | Description |
 |---|---|---|
-| `load_raw_data(start_date)` | `DataFrame` | Read CPI index CSV, parse dates, convert to numeric. Optionally filter by start date. |
-| `load_basket_weights(features, include_rent)` | `ndarray` or `dict` | Official basket weights. Pass `features` list for regression (returns normalised ndarray); pass `None` for EDA (returns dict). |
-| `compute_growth_3m3m(df)` | `DataFrame` | 3-month-over-3-month annualised growth rates: `((s/s.shift(3)) - 1) * 4 * 100` |
-| `compute_forward_target(headline, horizon)` | `Series` | 12-month forward average of headline growth as regression target |
-| `prepare_regression_data(start_date, horizon, features)` | `(X, y, dates, growth)` | Full pipeline: load → impute → growth rates → target. Returns arrays ready for model fitting. |
+| `load_level_data(level, start_date)` | `(DataFrame, dict)` | Read a level CSV, extract weights row, parse dates. Returns data + weights dict. |
+| `compute_growth_3m3m(df)` | `DataFrame` | 3m/3m annualised growth rates |
+| `compute_forward_target(headline, horizon)` | `Series` | 12-month forward average of headline growth |
+| `prepare_regression_data(level, start_date, horizon)` | `(X, y, w_prior, features, dates, growth)` | Full pipeline: load -> impute -> growth -> target. Returns arrays ready for model fitting. |
+
+## Usage
+
+```python
+from utils.data_load import prepare_regression_data
+
+# Level 2 (47 components, default)
+X, y, w_prior, features, dates, growth = prepare_regression_data(level=2)
+
+# Level 1 (9 sectors)
+X, y, w_prior, features, dates, growth = prepare_regression_data(level=1)
+```
 
 ## Data Pipeline
 
 ```
-load_raw_data()
-  → smart_impute()           (from utils/smart_imputation.py)
-  → compute_growth_3m3m()
-  → compute_forward_target()
-  → filter valid rows
-  → return (X, y, dates, growth)
+load_level_data(level)
+  -> smart_impute()
+  -> compute_growth_3m3m()
+  -> compute_forward_target()
+  -> filter valid rows
+  -> return (X, y, w_prior, features, dates, growth)
 ```

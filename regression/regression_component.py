@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
+from joblib import Parallel, delayed
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -36,12 +37,13 @@ from regression.figures import fig_weights, fig_lambda_cv, fig_insample, fig_oos
 
 def _fit_single(X: np.ndarray, y: np.ndarray,
                 lam: float, w_prior: np.ndarray,
-                x0: np.ndarray = None) -> dict:
+                x0: np.ndarray = None,
+                nonneg: bool = True) -> dict:
     """
     Fit assemblage for a single lambda.
 
     min_w  mean(y - Xw)²  +  λ ||w - w_prior||²
-    s.t.   w >= 0,  Σw = 1
+    s.t.   Σw = 1  [and w >= 0 if nonneg=True]
     """
     k = X.shape[1]
 
@@ -52,7 +54,7 @@ def _fit_single(X: np.ndarray, y: np.ndarray,
         objective,
         x0=w_prior.copy() if x0 is None else x0,
         method='SLSQP',
-        bounds=[(0, None)] * k,
+        bounds=[(0, None)] * k if nonneg else None,
         constraints={'type': 'eq', 'fun': lambda w: w.sum() - 1},
         options={'maxiter': 2000, 'ftol': 1e-10},
     )
@@ -74,26 +76,32 @@ def _fit_single(X: np.ndarray, y: np.ndarray,
 
 def _cv_mses(X: np.ndarray, y: np.ndarray,
              lambdas: np.ndarray, w_prior: np.ndarray,
-             n_folds: int = N_CV_FOLDS) -> np.ndarray:
+             n_folds: int = N_CV_FOLDS,
+             nonneg: bool = True) -> np.ndarray:
     """
     Expanding-window time-series CV.  Returns mean CV MSE per lambda.
-    No shuffling — each fold trains on [0, t] and validates on [t, t+k].
+    Parallelised over lambdas — all (lambda, fold) pairs are independent.
     """
-    n          = len(y)
-    min_tr     = n // (n_folds + 1)
-    fold_size  = n // n_folds
+    n         = len(y)
+    min_tr    = n // (n_folds + 1)
+    fold_size = n // n_folds
+
+    def _one(lam, f):
+        t_end  = min_tr + f * fold_size
+        t_test = min(t_end + fold_size, n)
+        if t_end >= n:
+            return (lam, f, np.nan)
+        r  = _fit_single(X[:t_end], y[:t_end], lam, w_prior, nonneg=nonneg)
+        pv = X[t_end:t_test] @ r['weights']
+        return (lam, f, float(np.mean((y[t_end:t_test] - pv) ** 2)))
+
+    jobs = [(lam, f) for lam in lambdas for f in range(n_folds)]
+    out  = Parallel(n_jobs=-1, backend='loky')(delayed(_one)(lam, f) for lam, f in jobs)
+
+    lam_to_idx = {lam: i for i, lam in enumerate(lambdas)}
     mse_matrix = np.full((len(lambdas), n_folds), np.nan)
-
-    for li, lam in enumerate(lambdas):
-        for f in range(n_folds):
-            t_end  = min_tr + f * fold_size
-            t_test = min(t_end + fold_size, n)
-            if t_end >= n:
-                continue
-            r   = _fit_single(X[:t_end], y[:t_end], lam, w_prior)
-            pv  = X[t_end:t_test] @ r['weights']
-            mse_matrix[li, f] = np.mean((y[t_end:t_test] - pv) ** 2)
-
+    for lam, f, mse in out:
+        mse_matrix[lam_to_idx[lam], f] = mse
     return np.nanmean(mse_matrix, axis=1)
 
 
@@ -123,7 +131,9 @@ def rolling_oos(X: np.ndarray, y: np.ndarray,
                 min_train: int = MIN_TRAIN,
                 step: int = OOS_STEP,
                 lambdas: np.ndarray = LAMBDA_GRID,
-                window: int = None) -> tuple:
+                window: int = None,
+                nonneg: bool = True,
+                n_jobs: int = -1) -> tuple:
     """
     Rolling OOS for Albacorecomps.
 
@@ -133,21 +143,18 @@ def rolling_oos(X: np.ndarray, y: np.ndarray,
     """
     win_str = f'rolling {window}m' if window else 'expanding'
     print(f'\n  Selecting OOS lambda from first {min_train} months [{win_str}]...')
-    cv_mse     = _cv_mses(X[:min_train], y[:min_train], lambdas, w_prior, n_folds=5)
+    cv_mse     = _cv_mses(X[:min_train], y[:min_train], lambdas, w_prior, n_folds=5, nonneg=nonneg)
     oos_lambda = lambdas[int(np.argmin(cv_mse))]
     print(f'  OOS λ = {oos_lambda:.5f}')
 
-    steps   = range(min_train, len(X), step)
-    records = []
-    w0 = w_prior.copy()
-    for i, t in enumerate(steps):
+    steps = list(range(min_train, len(X), step))
+
+    def _predict(t):
         t_start = max(0, t - window) if window else 0
-        r       = _fit_single(X[t_start:t], y[t_start:t], oos_lambda, w_prior, x0=w0)
-        w0      = r['weights']          # warm-start next iteration
-        y_pred  = float(X[t] @ r['weights'])
-        records.append({'date': dates[t], 'actual': y[t], 'predicted': y_pred})
-        if (i + 1) % 60 == 0:
-            print(f'    {i+1}/{len(steps)} ...')
+        r = _fit_single(X[t_start:t], y[t_start:t], oos_lambda, w_prior, nonneg=nonneg)
+        return {'date': dates[t], 'actual': y[t], 'predicted': float(X[t] @ r['weights'])}
+
+    records = Parallel(n_jobs=n_jobs, backend='loky')(delayed(_predict)(t) for t in steps)
 
     df_oos           = pd.DataFrame(records).set_index('date')
     df_oos['error']  = df_oos['predicted'] - df_oos['actual']

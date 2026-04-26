@@ -84,3 +84,22 @@ def print_scorecard(insample: dict, oos_df: pd.DataFrame,
         print(f'  {name:<30}  {m["RMSE"]:>7.4f}  {m["MAE"]:>7.4f}  {m["R2"]:>7.4f}{marker}')
 
     print('=' * 65 + '\n')
+    return rows
+
+
+def save_scorecard(rows: list, insample: dict, out_path,
+                   features: list[str] = None) -> None:
+    """Save OOS scorecard rows to CSV."""
+    import csv
+    from pathlib import Path
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['model', 'rmse', 'mae', 'r2', 'n'])
+        for name, m in rows:
+            writer.writerow([name,
+                             round(m['RMSE'], 4),
+                             round(m['MAE'],  4),
+                             round(m['R2'],   4),
+                             m['N']])
+    print(f'  saved {out_path}')

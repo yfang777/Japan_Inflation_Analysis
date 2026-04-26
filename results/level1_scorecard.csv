@@ -1,0 +1,9 @@
+model,rmse,mae,r2,n
+Comps (expanding),1.4352,1.0343,-0.0947,300
+Comps (rolling 10y),1.4027,1.0063,-0.0458,300
+Ranks (rolling 10y),1.145,0.8323,0.3032,300
+Random walk,2.1681,1.6169,-1.4983,300
+Core (ex fresh food),1.9917,1.4619,-1.1084,300
+Core (ex food&energy),2.2254,1.7019,-1.6322,300
+Unconditional mean,1.3795,1.0502,-0.0114,300
+OLS (headline+core+super),1.2173,0.8657,0.2124,300

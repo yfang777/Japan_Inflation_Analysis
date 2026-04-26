@@ -105,7 +105,6 @@ def compute_forward_target(headline_growth: pd.Series,
 # ══════════════════════════════════════════════════════════════════════════════
 
 _BENCHMARK_COLS = [
-    'All items',
     'All items, less fresh food',
     'All items, less food (less alcoholic beverages) and energy',
 ]
@@ -113,11 +112,11 @@ _BENCHMARK_COLS = [
 
 def load_benchmark_series(start_date: str = START_DATE) -> pd.DataFrame:
     """
-    Return 3m/3m growth rates for headline + two core composite series.
+    Return 3m/3m growth rates for the two core composite series only.
 
-    These composites exist in level_3.csv regardless of which level is
-    used for the regression, so benchmarks always work.
-    Only the 3 needed columns are loaded and imputed — not the full 700+.
+    'All items' is intentionally excluded — use the level's own headline
+    series (from growth) to avoid data vintage mismatches around tax events.
+    Only the 2 needed columns are loaded and imputed — not the full 700+.
     """
     path = LEVEL_DIR / 'level_3.csv'
     raw = pd.read_csv(path, dtype=str)

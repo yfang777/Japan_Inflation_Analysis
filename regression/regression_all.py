@@ -12,6 +12,8 @@ Run:  python regression/regression_all.py --level 2
 
 import sys
 from pathlib import Path
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
@@ -28,16 +30,16 @@ from regression.regression_rank import rolling_oos_ranks, build_rank_matrix, _fi
 from regression.benchmarks import (
     compute_benchmarks, compute_mean_benchmark, compute_ols_benchmark,
 )
-from regression.evaluation import print_scorecard
+from regression.evaluation import print_scorecard, save_scorecard
 from regression.figures import (
     fig_weights, fig_lambda_cv, fig_insample, fig_oos,
-    fig_ranks_weights, set_plots_dir,
+    fig_ranks_weights, fig_prediction_quality, set_plots_dir,
 )
 
 
-def main(level: int = 2) -> None:
+def main(level: int = 2, step: int = OOS_STEP) -> None:
     print('=' * 65)
-    print(f'ASSEMBLAGE REGRESSION  –  Level {level}  (Comps + Ranks)')
+    print(f'ASSEMBLAGE REGRESSION  –  Level {level}  (Comps + Ranks)  step={step}')
     print('=' * 65)
 
     # ── data ──────────────────────────────────────────────────────────────────
@@ -52,13 +54,19 @@ def main(level: int = 2) -> None:
     insample = train(X, y, w_prior)
     print(f'  In-sample RMSE: {insample["rmse"]:.4f}  R2: {insample["r2"]:.4f}')
 
-    print('\n[3/5] Albacorecomps – OOS (expanding + rolling)...')
-    oos_exp_df,  _ = rolling_oos(X, y, w_prior, dates, window=None)
-    oos_roll_df, _ = rolling_oos(X, y, w_prior, dates, window=ROLLING_WINDOW)
-
-    # ── ranks: OOS ────────────────────────────────────────────────────────────
-    print('\n[4/5] Albacoreranks – OOS (rolling)...')
-    oos_rank_df, ranks_lam = rolling_oos_ranks(X, y, dates)
+    print('\n[3-4/5] OOS – comps (expanding + rolling) + ranks in parallel...')
+    # level 3 has 700+ features — give each model all cores (GIL released by SLSQP)
+    n_jobs_each = -1 if level == 3 else max(1, (os.cpu_count() or 4) // 3)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_exp  = pool.submit(rolling_oos, X, y, w_prior, dates,
+                             window=None,           step=step, nonneg=True, n_jobs=n_jobs_each)
+        f_roll = pool.submit(rolling_oos, X, y, w_prior, dates,
+                             window=ROLLING_WINDOW, step=step, nonneg=True, n_jobs=n_jobs_each)
+        f_rank = pool.submit(rolling_oos_ranks, X, y, dates,
+                             step=step, n_jobs=n_jobs_each)
+    oos_exp_df,  _         = f_exp.result()
+    oos_roll_df, _         = f_roll.result()
+    oos_rank_df, ranks_lam = f_rank.result()
 
     # ── in-sample rank weights (last full window) ─────────────────────────────
     O_full     = build_rank_matrix(X)
@@ -74,18 +82,24 @@ def main(level: int = 2) -> None:
 
     # ── unified scorecard ─────────────────────────────────────────────────────
     extra_oos = {
-        'Comps (rolling 20y)': oos_roll_df,
-        'Ranks (rolling 20y)': oos_rank_df,
+        'Comps (rolling 10y)': oos_roll_df,
+        'Ranks (rolling 10y)': oos_rank_df,
     }
-    our_models = {'Comps (expanding)', 'Comps (rolling 20y)', 'Ranks (rolling 20y)'}
+    our_models = {'Comps (expanding)', 'Comps (rolling 10y)', 'Ranks (rolling 10y)'}
 
-    print_scorecard(
+    rows = print_scorecard(
         insample, oos_exp_df, bm_df,
         extra_oos=extra_oos,
         our_models=our_models,
         primary_label='Comps (expanding)',
         features=features,
     )
+
+    # ── save results ──────────────────────────────────────────────────────────
+    results_dir = PLOTS_DIR.parent / 'results'
+    save_scorecard(rows, insample,
+                   results_dir / f'level{level}_scorecard.csv',
+                   features=features)
 
     # ── figures ───────────────────────────────────────────────────────────────
     print('\nGenerating figures...')
@@ -98,10 +112,11 @@ def main(level: int = 2) -> None:
     fig_ranks_weights(r_ranks_is['weights'], ranks_lam)
 
     extra_oos_fig = {
-        'Comps (rolling 20y)': oos_roll_df,
-        'Ranks (rolling 20y)': oos_rank_df,
+        'Comps (rolling 10y)': oos_roll_df,
+        'Ranks (rolling 10y)': oos_rank_df,
     }
     fig_oos(oos_exp_df, bm_df, extra_oos=extra_oos_fig)
+    fig_prediction_quality(oos_exp_df, extra_oos=extra_oos_fig)
 
     print(f'\nDone. Figures saved to {out_dir.resolve()}')
 
@@ -110,5 +125,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--level', type=int, default=2, choices=[1, 2, 3])
+    parser.add_argument('--step',  type=int, default=OOS_STEP,
+                        help='OOS step size in months (1=monthly, 3=quarterly)')
     args = parser.parse_args()
-    main(level=args.level)
+    main(level=args.level, step=args.step)

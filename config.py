@@ -227,8 +227,8 @@ MIN_TRAIN         = 120                       # 10-year minimum OOS training win
 OOS_STEP          = 1                         # rolling step size (months)
 N_CV_FOLDS        = 10
 LAMBDA_GRID       = np.logspace(-4, 3, 40)    # comps: penalises deviation from basket prior
-LAMBDA_GRID_RANKS = np.logspace(0, 5, 40)     # ranks: penalises non-smoothness across ranks
-ROLLING_WINDOW    = 240                       # 20-year rolling window (paper's default)
+LAMBDA_GRID_RANKS = np.logspace(0, 7, 40)     # ranks: penalises non-smoothness across ranks
+ROLLING_WINDOW    = 120                       # 10-year rolling window (optimal for Japan)
 
 # ── matplotlib defaults ──────────────────────────────────────────────────────
 MPL_RCPARAMS = {

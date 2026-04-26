@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
+from joblib import Parallel, delayed
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -83,22 +84,27 @@ def _fit_ranks_single(O: np.ndarray, y: np.ndarray, lam: float,
 def _cv_mses_ranks(O: np.ndarray, y: np.ndarray,
                    lambdas: np.ndarray,
                    n_folds: int = N_CV_FOLDS) -> np.ndarray:
-    """Expanding-window CV for rank-space model."""
+    """Expanding-window CV for rank-space model. Parallelised over lambdas."""
     n         = len(y)
     min_tr    = n // (n_folds + 1)
     fold_size = n // n_folds
-    mse_mat   = np.full((len(lambdas), n_folds), np.nan)
 
-    for li, lam in enumerate(lambdas):
-        for f in range(n_folds):
-            t_end  = min_tr + f * fold_size
-            t_test = min(t_end + fold_size, n)
-            if t_end >= n:
-                continue
-            r  = _fit_ranks_single(O[:t_end], y[:t_end], lam)
-            pv = O[t_end:t_test] @ r['weights']
-            mse_mat[li, f] = np.mean((y[t_end:t_test] - pv) ** 2)
+    def _one(lam, f):
+        t_end  = min_tr + f * fold_size
+        t_test = min(t_end + fold_size, n)
+        if t_end >= n:
+            return (lam, f, np.nan)
+        r  = _fit_ranks_single(O[:t_end], y[:t_end], lam)
+        pv = O[t_end:t_test] @ r['weights']
+        return (lam, f, float(np.mean((y[t_end:t_test] - pv) ** 2)))
 
+    jobs = [(lam, f) for lam in lambdas for f in range(n_folds)]
+    out  = Parallel(n_jobs=-1, backend='loky')(delayed(_one)(lam, f) for lam, f in jobs)
+
+    lam_to_idx = {lam: i for i, lam in enumerate(lambdas)}
+    mse_mat = np.full((len(lambdas), n_folds), np.nan)
+    for lam, f, mse in out:
+        mse_mat[lam_to_idx[lam], f] = mse
     return np.nanmean(mse_mat, axis=1)
 
 
@@ -111,7 +117,8 @@ def rolling_oos_ranks(X: np.ndarray, y: np.ndarray,
                       min_train: int = MIN_TRAIN,
                       step: int = OOS_STEP,
                       lambdas: np.ndarray = LAMBDA_GRID_RANKS,
-                      window: int = ROLLING_WINDOW) -> tuple:
+                      window: int = ROLLING_WINDOW,
+                      n_jobs: int = -1) -> tuple:
     """
     Rolling OOS for Albacoreranks.
 
@@ -127,17 +134,14 @@ def rolling_oos_ranks(X: np.ndarray, y: np.ndarray,
     oos_lambda = lambdas[int(np.argmin(cv_mse))]
     print(f'  [Ranks] OOS λ = {oos_lambda:.5f}')
 
-    steps   = range(min_train, len(O), step)
-    records = []
-    w0 = np.ones(O.shape[1]) / O.shape[1]
-    for i, t in enumerate(steps):
+    steps = list(range(min_train, len(O), step))
+
+    def _predict(t):
         t_start = max(0, t - window) if window else 0
-        r       = _fit_ranks_single(O[t_start:t], y[t_start:t], oos_lambda, x0=w0)
-        w0      = r['weights']          # warm-start next iteration
-        y_pred  = float(O[t] @ r['weights'])
-        records.append({'date': dates[t], 'actual': y[t], 'predicted': y_pred})
-        if (i + 1) % 60 == 0:
-            print(f'    {i+1}/{len(steps)} ...')
+        r = _fit_ranks_single(O[t_start:t], y[t_start:t], oos_lambda)
+        return {'date': dates[t], 'actual': y[t], 'predicted': float(O[t] @ r['weights'])}
+
+    records = Parallel(n_jobs=n_jobs, backend='loky')(delayed(_predict)(t) for t in steps)
 
     df_oos           = pd.DataFrame(records).set_index('date')
     df_oos['error']  = df_oos['predicted'] - df_oos['actual']

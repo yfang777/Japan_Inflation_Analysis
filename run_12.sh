@@ -7,10 +7,8 @@ PYTHON="/c/Users/ouyan/AppData/Local/Programs/Python/Python312/python"
 mkdir -p logs
 
 echo "=========================================="
-echo "  Japan Inflation Assemblage – Run All"
+echo "  Levels 1 + 2  (sequential)"
 echo "=========================================="
-
-mkdir -p logs
 
 echo ""
 echo "--- Level 1 ---"
@@ -21,8 +19,4 @@ echo "--- Level 2 ---"
 $PYTHON regression/regression_all.py --level 2 2>&1 | tee logs/level2.log
 
 echo ""
-echo "--- Level 3  [slow: ~700 components, step=3] ---"
-$PYTHON regression/regression_all.py --level 3 --step 3 2>&1 | tee logs/level3.log
-
-echo ""
-echo "All done. Plots saved to plots/  |  Results saved to results/"
+echo "Done. Plots → plots/  |  Results → results/"

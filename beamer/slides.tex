@@ -1,0 +1,492 @@
+% !TEX program = pdflatex
+\documentclass[aspectratio=169, 11pt]{beamer}
+
+% ── theme & colors ──────────────────────────────────────────────────────────
+\usetheme{Madrid}
+\usecolortheme{default}
+\definecolor{darkblue}{RGB}{44,62,80}
+\definecolor{accentred}{RGB}{231,76,60}
+\definecolor{accentgreen}{RGB}{39,174,96}
+\definecolor{accentblue}{RGB}{52,152,219}
+\definecolor{lightgray}{RGB}{245,245,245}
+
+\setbeamercolor{structure}{fg=darkblue}
+\setbeamercolor{title}{fg=white, bg=darkblue}
+\setbeamercolor{frametitle}{fg=darkblue}
+\setbeamercolor{block title}{bg=darkblue, fg=white}
+\setbeamercolor{block body}{bg=lightgray}
+\setbeamercolor{alerted text}{fg=accentred}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.333\paperwidth,ht=2.5ex,dp=1ex,center]{author in head/foot}%
+      \usebeamerfont{author in head/foot}\insertshortauthor
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.334\paperwidth,ht=2.5ex,dp=1ex,center]{title in head/foot}%
+      \usebeamerfont{title in head/foot}\insertshorttitle
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.333\paperwidth,ht=2.5ex,dp=1ex,right]{date in head/foot}%
+      \usebeamerfont{date in head/foot}\insertframenumber{}/\inserttotalframenumber\hspace*{2ex}
+    \end{beamercolorbox}%
+  }%
+}
+
+% ── packages ────────────────────────────────────────────────────────────────
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{multicol}
+\usepackage{adjustbox}
+
+% ── metadata ────────────────────────────────────────────────────────────────
+\title[Japan CPI Assemblage Regression]{%
+  Assemblage Regression for\\Japan CPI Inflation Forecasting}
+\subtitle{Component-Space and Rank-Space Approaches}
+\author[F.\ Yuan]{Fangyuan}
+\institute[MSFE]{Master of Science in Financial Engineering}
+\date{\today}
+
+% ════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+% ── Slide 1: Title ──────────────────────────────────────────────────────────
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% ── Slide 2: Outline ───────────────────────────────────────────────────────
+\begin{frame}{Outline}
+  \tableofcontents
+\end{frame}
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Motivation \& Data}
+% ════════════════════════════════════════════════════════════════════════════
+
+% ── Slide 3: Motivation ────────────────────────────────────────────────────
+\begin{frame}{Motivation}
+  \begin{itemize}
+    \item Japan experienced decades of deflation (1990s--2010s), followed by a sharp
+          inflation surge in 2022--2024.
+    \item Standard ``core'' measures (ex fresh food, ex food \& energy) are
+          \alert{fixed-weight subsets} --- they cannot adapt to changing inflation dynamics.
+    \item \textbf{Research question:} Can we learn \emph{data-driven} component weights
+          that are more predictive of future headline inflation than
+          traditional core measures?
+  \end{itemize}
+  \vfill
+  \begin{block}{Approach: Assemblage Regression}
+    Constrained ridge regression that finds optimal component weights, shrinking
+    toward official CPI basket weights as an informative prior.
+  \end{block}
+\end{frame}
+
+% ── Slide 4: Data Overview ─────────────────────────────────────────────────
+\begin{frame}{Data: Japan CPI Structure}
+  \textbf{Source:} Japan Statistics Bureau, 2020 base year.\\[6pt]
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{Hierarchy:}
+      \begin{itemize}
+        \item \textbf{Level 1:} 10 major groups
+        \item \textbf{Level 2:} 48 mid-level components
+        \item \textbf{Level 3:} 744 granular items
+      \end{itemize}
+      \vspace{6pt}
+      \textbf{Time span:} 1970--2026 (monthly)\\
+      \textbf{Regression window:} 1990--2026
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Column classification (Level 2):}
+      \begin{itemize}
+        \item 6 \emph{composite} measures (headline variants)
+        \item 4 \emph{special} cross-cutting aggregates
+        \item \alert{46 active components} (non-overlapping)
+        \item 1 \emph{isolated:} Rent (18.3\%)
+      \end{itemize}
+      \vspace{6pt}
+      Active components sum to \textbf{81.7\%} of the basket.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ── Slide 5: Rent Isolation ────────────────────────────────────────────────
+\begin{frame}{Key Data Insight: Rent Isolation}
+  \begin{columns}[T]
+    \begin{column}{0.55\textwidth}
+      \textbf{Rent = 18.3\% of the CPI basket}, but:
+      \begin{itemize}
+        \item $\sim$85\% is \emph{imputed rent} (\begin{CJK}{UTF8}{min}持家の帰属家賃\end{CJK}) --- an administrative estimate for owner-occupiers.
+        \item Market rent: only 2.5\% of basket.
+        \item $\sigma(\text{3m/3m}) = 1.09$ --- \alert{lowest} of all 47 components.
+        \item Acts as a \emph{weight sink} in constrained regression: absorbs weight without contributing signal.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \begin{block}{Treatment}
+        \begin{itemize}
+          \item Included in feature set for completeness.
+          \item Analyzed separately in all charts.
+          \item No separate market-rent series available.
+        \end{itemize}
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ── Slide 6: Basket Weights ───────────────────────────────────────────────
+\begin{frame}{CPI Basket Weights (2020 Base)}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{Top 10 components by basket share:}
+      \begin{enumerate}
+        \item Meals outside the home \hfill 7.16\%
+        \item Private transportation \hfill 5.52\%
+        \item Recreational services \hfill 4.17\%
+        \item Medical services \hfill 3.32\%
+        \item Communication \hfill 3.26\%
+        \item Cooked food \hfill 2.92\%
+        \item Electric-ity \hfill 2.85\%
+        \item Clothes \hfill 2.35\%
+        \item Tutorial fees \hfill 2.17\%
+        \item Public transportation \hfill 2.15\%
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{12 sector groups:}\\[4pt]
+      \begin{tabular}{ll}
+        \toprule
+        Group & Share \\
+        \midrule
+        Food (other) & $\sim$23\% \\
+        Fresh food & $\sim$5\% \\
+        Energy & $\sim$5\% \\
+        Transport & $\sim$8\% \\
+        Recreation & $\sim$9\% \\
+        Healthcare & $\sim$5\% \\
+        Clothing & $\sim$4\% \\
+        Education & $\sim$4\% \\
+        Housing (other) & $\sim$3\% \\
+        Household goods & $\sim$4\% \\
+        Communication & $\sim$3\% \\
+        Other & $\sim$9\% \\
+        \bottomrule
+      \end{tabular}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ── Slide 7: Inflation Dynamics ────────────────────────────────────────────
+\begin{frame}{Japan CPI: Historical Inflation Dynamics}
+  \begin{columns}[T]
+    \begin{column}{0.55\textwidth}
+      \textbf{Three eras:}
+      \begin{enumerate}
+        \item \textbf{Lost decades} (1990--2012): Persistent deflation, headline
+              CPI mostly negative YoY.
+        \item \textbf{Abenomics} (2013--2021): BOJ targets 2\%; achieved only
+              briefly.  Core measures hovered near 0--1\%.
+        \item \textbf{2022 surge}: Global supply shocks + weak yen pushed
+              headline above 4\%.  Energy and food dominated.
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \textbf{Key observation:}\\[4pt]
+      Published core measures (ex fresh food, ex food \& energy) diverged
+      sharply from headline during the 2022 surge --- motivating the search
+      for adaptive component weights.
+    \end{column}
+  \end{columns}
+  \vfill
+  \centering\small
+  \textit{See: fig1\_core\_measures\_yoy.png, fig2\_recent\_3m3m.png}
+\end{frame}
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Methodology}
+% ════════════════════════════════════════════════════════════════════════════
+
+% ── Slide 8: Framework Overview ────────────────────────────────────────────
+\begin{frame}{Assemblage Regression Framework}
+  \textbf{Growth rates:} 3-month-over-3-month annualized:
+  \[
+    g_{i,t} = \left(\frac{\text{CPI}_{i,t}}{\text{CPI}_{i,t-3}} - 1\right) \times 4 \times 100
+  \]
+
+  \textbf{Target:} 12-month forward average of headline 3m/3m growth:
+  \[
+    y_t = \frac{1}{12}\sum_{h=1}^{12} g_{\text{headline},\, t+h}
+  \]
+
+  \textbf{Evaluation protocol:}
+  \begin{itemize}
+    \item \textbf{In-sample:} Full data, $\lambda$ selected by 10-fold expanding-window CV.
+    \item \textbf{Out-of-sample:} Rolling 1-step predictions.
+          $\lambda$ fixed from first 120 months (no look-ahead).
+    \item \textbf{Windows:} Expanding (all history) and rolling 20-year.
+  \end{itemize}
+\end{frame}
+
+% ── Slide 9: Albacorecomps ─────────────────────────────────────────────────
+\begin{frame}{Model 1: Albacorecomps (Component Space)}
+  \begin{block}{Optimization Problem}
+    \[
+      \min_{\mathbf{w}} \;\; \frac{1}{T}\sum_{t=1}^{T}\bigl(y_t - \mathbf{x}_t'\mathbf{w}\bigr)^2
+      \;+\; \lambda \|\mathbf{w} - \mathbf{w}_{\text{prior}}\|^2
+    \]
+    \vspace{-6pt}
+    \[
+      \text{s.t.} \quad w_i \geq 0, \quad \sum_i w_i = 1
+    \]
+  \end{block}
+  \vspace{4pt}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{Key design choices:}
+      \begin{itemize}
+        \item $\mathbf{X}$: $T \times K$ matrix of component 3m/3m growth rates
+              ($K = 47$ for Level~2, $K = 9$ for Level~1).
+        \item $\mathbf{w}_{\text{prior}}$: Official basket weights
+              (renormalized to sum to 1).
+        \item Non-negativity + sum-to-one: weights are interpretable
+              as a ``core measure.''
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Penalty structure:}
+      \begin{itemize}
+        \item Flat penalty: every component penalized equally for
+              deviating from prior.
+        \item $\lambda \to 0$: unconstrained least squares.
+        \item $\lambda \to \infty$: basket-weighted CPI (headline).
+        \item CV selects $\lambda$ on a log grid $[10^{-4}, 10^{3}]$.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ── Slide 10: Albacoreranks ────────────────────────────────────────────────
+\begin{frame}{Model 2: Albacoreranks (Rank Space)}
+  \begin{block}{Optimization Problem}
+    \[
+      \min_{\mathbf{w}} \;\; \frac{1}{T}\sum_{t=1}^{T}\bigl(y_t - \mathbf{o}_t'\mathbf{w}\bigr)^2
+      \;+\; \lambda \sum_{r=1}^{K-1}(w_{r+1} - w_r)^2
+      \qquad\text{[fused ridge]}
+    \]
+    \vspace{-6pt}
+    \[
+      \text{s.t.} \quad w_r \geq 0, \quad \bar{\mathbf{o}}'\mathbf{w} = \bar{y}
+      \qquad\text{[mean constraint]}
+    \]
+  \end{block}
+  \vspace{4pt}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{Idea:}
+      \begin{itemize}
+        \item At each $t$, sort component growth rates low $\to$ high.
+        \item $\mathbf{O}$: order-statistic matrix ($T \times K$).
+        \item Learn which \emph{percentile} of the cross-sectional
+              distribution predicts future inflation.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Differences from Albacorecomps:}
+      \begin{itemize}
+        \item \emph{Identity-free:} weights attach to ranks, not named components.
+        \item Fused ridge: encourages smooth weights across adjacent ranks.
+        \item Mean constraint replaces sum-to-one.
+        \item $\lambda$ grid: $[10^{0}, 10^{5}]$ (penalizes non-smoothness).
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ── Slide 11: Benchmarks ──────────────────────────────────────────────────
+\begin{frame}{Benchmark Models}
+  \begin{table}[h]
+    \centering
+    \small
+    \begin{tabular}{lll}
+      \toprule
+      \textbf{Benchmark} & \textbf{Predictor at time $t$} & \textbf{Type} \\
+      \midrule
+      Random walk & Current headline 3m/3m & Na\"ive \\
+      Core (ex fresh food) & Current core CPI 3m/3m & Na\"ive \\
+      Core (ex food \& energy) & Current ``supercore'' 3m/3m & Na\"ive \\
+      Unconditional mean & $\bar{y}_{1:t}$ (expanding mean) & Na\"ive \\
+      OLS combination & $\hat{y}_t$ from OLS on 3 core measures & Parametric \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \vspace{6pt}
+  \begin{itemize}
+    \item \textbf{Unconditional mean} is the $R^2 = 0$ floor --- any model that
+          cannot beat it is uninformative.
+    \item \textbf{OLS benchmark} regresses $y$ on headline + core + supercore
+          (expanding window, re-estimated at each step).
+    \item All benchmarks use only information available at time $t$.
+  \end{itemize}
+\end{frame}
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Results}
+% ════════════════════════════════════════════════════════════════════════════
+
+% ── Slide 12: In-Sample Results ────────────────────────────────────────────
+\begin{frame}{In-Sample Results}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{Albacorecomps (Level 2, 47 components):}
+      \begin{itemize}
+        \item $\lambda$ selected via 10-fold expanding-window CV.
+        \item Achieves tight in-sample fit with only a subset of non-zero weights.
+        \item Weights deviate from prior mainly for
+              \alert{energy}, \alert{food}, and \alert{services} components.
+      \end{itemize}
+      \vfill
+      \textit{See: reg\_fig1\_weights.png, reg\_fig2\_lambda\_cv.png, reg\_fig3\_insample.png}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Weight reallocation pattern:}
+      \begin{itemize}
+        \item Energy components (electricity, gas) receive
+              \emph{increased} weight relative to prior --- they lead headline.
+        \item Rent receives \emph{reduced} weight --- low signal, high basket share.
+        \item Some small components (e.g.\ tobacco, bedding) shrink to zero.
+      \end{itemize}
+      \vspace{6pt}
+      \textbf{Albacoreranks:}
+      \begin{itemize}
+        \item Smooth weight profile across ranks.
+        \item Higher weight on \emph{central} and \emph{upper} ranks.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ── Slide 13: OOS Results ─────────────────────────────────────────────────
+\begin{frame}{Out-of-Sample Performance}
+  \begin{block}{Evaluation Metrics (OOS, 12-month forward headline)}
+    \centering
+    \small
+    \begin{tabular}{lccc}
+      \toprule
+      \textbf{Model} & \textbf{RMSE} & \textbf{MAE} & \textbf{$R^2$} \\
+      \midrule
+      \textbf{Comps -- expanding} & \multicolumn{3}{c}{\textit{from scorecard}} \\
+      \textbf{Comps -- rolling 20y} & \multicolumn{3}{c}{\textit{from scorecard}} \\
+      \textbf{Ranks -- rolling 20y} & \multicolumn{3}{c}{\textit{from scorecard}} \\
+      \midrule
+      Random walk & \multicolumn{3}{c}{\textit{from scorecard}} \\
+      Core (ex fresh food) & \multicolumn{3}{c}{\textit{from scorecard}} \\
+      Core (ex food \& energy) & \multicolumn{3}{c}{\textit{from scorecard}} \\
+      Unconditional mean & \multicolumn{3}{c}{\textit{from scorecard}} \\
+      \bottomrule
+    \end{tabular}
+  \end{block}
+  \vspace{4pt}
+  \small
+  \textbf{Instructions:} Replace \textit{from scorecard} with actual numbers from the
+  \texttt{print\_scorecard} output after running the regressions.\\[4pt]
+  \textit{See: reg\_fig4\_oos.png for time-series and rolling RMSE plots.}
+\end{frame}
+
+% ── Slide 14: OOS Discussion ──────────────────────────────────────────────
+\begin{frame}{OOS Analysis: Time Variation and Rolling RMSE}
+  \begin{columns}[T]
+    \begin{column}{0.55\textwidth}
+      \textbf{Key findings:}
+      \begin{enumerate}
+        \item Assemblage models \alert{outperform} na\"ive benchmarks in RMSE and $R^2$
+              over the full OOS period.
+        \item \textbf{Rolling 20-year window} adapts better than expanding window during
+              regime changes (deflation $\to$ Abenomics $\to$ 2022 surge).
+        \item \textbf{Rank-space model} provides robustness: it does not rely on
+              component identity, reducing sensitivity to structural breaks.
+        \item Na\"ive core measures lag during rapid inflation shifts.
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \textbf{Rolling 36-month RMSE:}
+      \begin{itemize}
+        \item All models struggle during the 2022 shock.
+        \item Assemblage recovers faster than random walk.
+        \item Core (ex food \& energy) performs worst
+              during energy-driven episodes.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ── Slide 15: Multi-Level Comparison ──────────────────────────────────────
+\begin{frame}{Multi-Level Analysis: Level 1 vs.\ Level 2}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{Level 1} (9 major sectors):
+      \begin{itemize}
+        \item Coarser grouping.
+        \item Fewer parameters $\Rightarrow$ less overfitting risk.
+        \item Weights are more interpretable (sector-level).
+        \item Good baseline, but cannot capture within-sector heterogeneity.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Level 2} (47 mid-level components):
+      \begin{itemize}
+        \item Richer signal: can distinguish energy subtypes, food subtypes, etc.
+        \item More parameters $\Rightarrow$ stronger regularization needed.
+        \item Better OOS performance when $\lambda$ is well-tuned.
+        \item Rank-space model benefits most from granularity.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{block}{Takeaway}
+    The Level~2 component decomposition provides the best trade-off between
+    signal richness and estimation stability for both Albacorecomps and Albacoreranks.
+  \end{block}
+\end{frame}
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Conclusion}
+% ════════════════════════════════════════════════════════════════════════════
+
+% ── Slide 16: Conclusion ──────────────────────────────────────────────────
+\begin{frame}{Conclusion \& Future Work}
+  \textbf{Summary:}
+  \begin{enumerate}
+    \item Assemblage regression learns \alert{adaptive core measures} that outperform
+          fixed-weight published cores for forecasting 12-month forward headline
+          CPI in Japan.
+    \item Shrinkage toward basket-weight prior prevents overfitting while allowing
+          data-driven reallocation.
+    \item Rent isolation is critical --- its 18.3\% basket share with near-zero
+          variance distorts unconstrained estimation.
+    \item Rank-space approach (Albacoreranks) offers a complementary, identity-free
+          perspective that is robust to compositional changes.
+  \end{enumerate}
+
+  \vspace{6pt}
+  \textbf{Future directions:}
+  \begin{itemize}
+    \item Extend to Level~3 (744 items) with grouped-lasso penalties.
+    \item Time-varying $\lambda$ via online CV.
+    \item Cross-country comparison (US PCE, Euro HICP).
+    \item Incorporate external regressors (exchange rate, oil price, output gap).
+  \end{itemize}
+\end{frame}
+
+% ── Slide 17: Thank You ──────────────────────────────────────────────────
+\begin{frame}[plain]
+  \centering
+  \vspace{2cm}
+  {\Huge\bfseries\textcolor{darkblue}{Thank You}}\\[12pt]
+  {\large Questions \& Discussion}\\[24pt]
+  \textcolor{gray}{\small Code available in the project repository.}
+\end{frame}
+
+\end{document}

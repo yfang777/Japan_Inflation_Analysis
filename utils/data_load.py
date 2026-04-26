@@ -13,40 +13,65 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import (
-    DATA_FILE, WEIGHTS_CSV, COMPONENT_COLS,
-    EN_TO_JPN, FEATURES, START_DATE, HORIZON,
-)
+from config import LEVEL_DIR, START_DATE, HORIZON
 from utils.smart_imputation import smart_impute
 
 
+HEADLINE_COL = 'All items'
+
+
 # ══════════════════════════════════════════════════════════════════════════════
-#  RAW DATA
+#  LEVEL-BASED DATA LOADING
 # ══════════════════════════════════════════════════════════════════════════════
 
-def load_raw_data(start_date: str | None = None) -> pd.DataFrame:
+def load_level_data(
+    level: int,
+    start_date: str | None = None,
+) -> tuple[pd.DataFrame, dict[str, float]]:
     """
-    Read the CPI index CSV, parse dates, and convert to numeric.
+    Load a ``level_{level}.csv`` file, extracting embedded basket weights.
+
+    These CSVs have a ``Weights`` row as the first data row, followed by
+    YYYYMM-indexed CPI index levels.
 
     Parameters
     ----------
+    level : int
+        Hierarchy level (1, 2, or 3).
     start_date : str or None
-        If provided, filter to rows >= this date (e.g. '1990-01-01').
+        If provided, filter to rows >= this date.
 
     Returns
     -------
-    pd.DataFrame
+    df : pd.DataFrame
         Datetime-indexed, all-numeric CPI index levels.
+    weights : dict[str, float]
+        Column name → basket weight (out of 10 000).
     """
-    df = pd.read_csv(DATA_FILE)
-    df['Date'] = pd.to_datetime(df['YearMonth'], format='%Y-%m')
-    df = (df.set_index('Date')
-            .drop('YearMonth', axis=1)
-            .replace('-', np.nan)
-            .apply(pd.to_numeric, errors='coerce'))
+    path = LEVEL_DIR / f'level_{level}.csv'
+    raw = pd.read_csv(path, dtype=str)
+
+    # first column is the date / label column
+    date_col = raw.columns[0]
+    cat_cols = raw.columns[1:]
+
+    # extract the Weights row
+    mask = raw[date_col].str.strip() == 'Weights'
+    weights_row = raw.loc[mask, cat_cols].iloc[0]
+    weights = {col: float(weights_row[col]) for col in cat_cols}
+
+    # remaining rows are data
+    data = raw.loc[~mask].copy()
+    data[date_col] = pd.to_datetime(data[date_col].str.strip(), format='%Y%m')
+    data = (data.set_index(date_col)
+                .replace('-', np.nan)
+                .apply(pd.to_numeric, errors='coerce'))
+    data.index.name = 'Date'
+
     if start_date:
-        df = df[df.index >= start_date].copy()
-    return df
+        data = data[data.index >= start_date].copy()
+
+    return data, weights
 
 
 # ══════════════════════════════════════════════════════════════════════════════

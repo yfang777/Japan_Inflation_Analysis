@@ -11,6 +11,7 @@ import numpy as np
 # ── paths ──────────────────────────────────────────────────────────────────────
 ROOT        = Path(__file__).parent
 DATA_FILE   = ROOT / 'data_clean' / 'japan_inflation_structured_check.csv'
+LEVEL_DIR   = ROOT / 'data_clean'          # level_1.csv, level_2.csv, level_3.csv
 WEIGHTS_CSV = ROOT / 'data_clean' / 'official_weights_national.csv'
 PLOTS_DIR   = ROOT / 'plots'
 

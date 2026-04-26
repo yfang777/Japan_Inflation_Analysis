@@ -103,13 +103,13 @@ def main(level: int = 2, step: int = OOS_STEP) -> None:
 
     # ── figures ───────────────────────────────────────────────────────────────
     print('\nGenerating figures...')
-    out_dir = PLOTS_DIR / f'level{level}'
-    set_plots_dir(out_dir)
+    comp_dir = PLOTS_DIR / f'level{level}_component'
+    rank_dir = PLOTS_DIR / f'level{level}_rank'
 
+    set_plots_dir(comp_dir)
     fig_weights(insample, w_prior, features=features)
     fig_lambda_cv(insample)
     fig_insample(insample, dates, y)
-    fig_ranks_weights(r_ranks_is['weights'], ranks_lam)
 
     extra_oos_fig = {
         'Comps (rolling 10y)': oos_roll_df,
@@ -118,7 +118,11 @@ def main(level: int = 2, step: int = OOS_STEP) -> None:
     fig_oos(oos_exp_df, bm_df, extra_oos=extra_oos_fig)
     fig_prediction_quality(oos_exp_df, extra_oos=extra_oos_fig)
 
-    print(f'\nDone. Figures saved to {out_dir.resolve()}')
+    set_plots_dir(rank_dir)
+    fig_ranks_weights(r_ranks_is['weights'], ranks_lam)
+
+    print(f'\nDone. Component figures: {comp_dir.resolve()}')
+    print(f'      Rank figures:      {rank_dir.resolve()}')
 
 
 if __name__ == '__main__':

@@ -48,7 +48,10 @@ def load_level_data(
     weights : dict[str, float]
         Column name -> basket weight (out of 10 000).
     """
+    # Accept either naming convention: level_3.csv or level3.csv.
     path = LEVEL_DIR / f'level_{level}.csv'
+    if not path.exists():
+        path = LEVEL_DIR / f'level{level}.csv'
     raw = pd.read_csv(path, dtype=str)
 
     # first column is the date / label column
@@ -118,7 +121,7 @@ def load_benchmark_series(start_date: str = START_DATE) -> pd.DataFrame:
     series (from growth) to avoid data vintage mismatches around tax events.
     Only the 2 needed columns are loaded and imputed — not the full 700+.
     """
-    path = LEVEL_DIR / 'level_3.csv'
+    path = LEVEL_DIR / 'level_3_full.csv'
     raw = pd.read_csv(path, dtype=str)
     date_col = raw.columns[0]
 
@@ -182,8 +185,10 @@ def prepare_regression_data(
     target = compute_forward_target(growth[headline_col], horizon)
 
     # component columns = everything except headline and known composites/aggregates
+    # Also drop pandas auto-named placeholder columns from trailing-comma CSVs.
     _exclude = set(COMPOSITE_COLS) | set(SPECIAL_COLS) | {headline_col}
-    features = [c for c in df.columns if c not in _exclude]
+    features = [c for c in df.columns
+                if c not in _exclude and not c.startswith('Unnamed:')]
 
     valid = target.notna() & growth[headline_col].notna()
     X_df = growth[features][valid]

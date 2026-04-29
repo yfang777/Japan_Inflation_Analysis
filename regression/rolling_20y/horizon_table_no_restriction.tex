@@ -1,0 +1,24 @@
+\begin{table}[htbp]
+\centering
+\caption{Forecasting Performance: Albacore$_{\text{comps,no\_restriction}}$ for Japan}
+\label{tab:horizon_table_no_restriction}
+\begin{tabular}{lcccccccc}
+\toprule
+ & \multicolumn{4}{c}{2010m1--2019m12} & \multicolumn{4}{c}{2020m1--2024m12} \\
+\cmidrule(lr){2-5} \cmidrule(lr){6-9}
+$h \to$ & 3 & 6 & 12 & 24 & 3 & 6 & 12 & 24 \\
+\midrule
+\multicolumn{9}{l}{\textit{Level 1 (K=10)}} \\
+Albacorecomps & 1.65 & 1.89 & 2.32 & 2.92 & 1.15 & 0.97 & 1.01 & 1.07 \\
+Albacoreranks & 1.33 & 1.14 & 1.11 & 1.08 & 1.26 & 1.11 & 1.09 & 0.97 \\
+\multicolumn{9}{l}{\textit{Level 2 (K=47)}} \\
+Albacorecomps & 1.42 & 1.66 & 2.06 & 2.62 & 1.16 & 0.98 & 1.03 & 1.08 \\
+Albacoreranks & 1.33 & 1.10 & 1.08 & 1.02 & 1.21 & 1.10 & 1.10 & 1.00 \\
+\multicolumn{9}{l}{\textit{Benchmarks}} \\
+$X^{bm}_t$, ($w_0{=}0$) & 1.01 & 1.04 & 1.08 & 1.12 & 1.05 & 1.08 & 1.11 & 1.13 \\
+$X^{bm+}_t$ & 0.98 & 0.96 & 1.01 & 1.02 & 0.80 & 0.83 & 0.91 & 0.94 \\
+$X^{bm+}_t$, ($w_0{=}0$) & 0.99 & 0.99 & 1.07 & 1.13 & 0.82 & 0.87 & 0.98 & 1.03 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}\footnotesize\item RMSE relative to $X^{bm}_t = [\textsc{All items}, \text{core}_{\text{ff}}, \text{core}_{\text{fe}}]$ with intercept. $X^{bm+}_t$ adds \textit{All items, less fresh food and energy} as a 4th regressor. $w_0{=}0$ denotes no intercept. Expanding window from 1990. The component-space variant here drops the $w \ge 0$ inequality (retaining only $\sum w = 1$, so weights may be negative) and replaces \texttt{smart\_impute} with \texttt{fillna(0)} for missing 3m/3m growth rates. $\lambda$ is selected once on the first-window CV and held fixed thereafter.\end{tablenotes}
+\end{table}

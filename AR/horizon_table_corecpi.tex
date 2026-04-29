@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+\centering
+\caption{Forecasting Performance: AR family on Japan All items, less fresh food (core)}
+\label{tab:ar_horizon_corecpi}
+\begin{tabular}{lcccccccccc}
+\toprule
+ & \multicolumn{5}{c}{Window A (2010m1-2019m12)} & \multicolumn{5}{c}{Window B (2020m1-2025m12)} \\
+\cmidrule(lr){2-6} \cmidrule(lr){7-11}
+$h \to$ & 1 & 3 & 6 & 12 & 24 & 1 & 3 & 6 & 12 & 24 \\
+\midrule
+$\text{AR}_{\text{lags}}(12)$ & 1.09 & 0.92 & 0.86 & \textbf{0.79} & 0.66 & 1.42 & 1.18 & 1.23 & 1.32 & 1.23 \\
+$\text{AR}^{+}_{\text{lags}}(12)$ & 1.08 & \textbf{0.92} & \textbf{0.86} & 0.79 & 0.67 & 1.41 & 1.18 & 1.22 & 1.31 & \textbf{1.15} \\
+$\text{AR}_{\text{ranks}}(12)$ & 1.38 & 1.02 & 0.94 & 0.81 & 0.69 & 1.52 & 1.23 & \textbf{1.16} & \textbf{1.10} & 1.19 \\
+AR(1) on YoY & \textbf{1.00} & 1.00 & 0.97 & 0.80 & \textbf{0.66} & \textbf{1.01} & \textbf{1.05} & 1.17 & 1.31 & 1.25 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}\footnotesize\item RMSE relative to the random-walk forecast ($\hat{y}^{\text{RW}}_{t+h} = $ current 12-month YoY at $t$, $=1.00$ by construction, omitted). Column minimum bolded. Expanding-window OOS, training start 1995-01.\end{tablenotes}
+\end{table}

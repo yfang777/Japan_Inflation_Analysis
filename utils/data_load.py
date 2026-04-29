@@ -110,6 +110,7 @@ def compute_forward_target(headline_growth: pd.Series,
 _BENCHMARK_COLS = [
     'All items, less fresh food',
     'All items, less food (less alcoholic beverages) and energy',
+    'All items, less fresh food and energy',   # used as 4th regressor in Xbm+
 ]
 
 
@@ -143,6 +144,87 @@ def load_benchmark_series(start_date: str = START_DATE) -> pd.DataFrame:
 
     df_imp, _ = smart_impute(data, strategy='auto', verbose=False)
     return compute_growth_3m3m(df_imp)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  TRIMMED-MEAN INFLATION (constructed from disaggregated level3.csv)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def load_trimmed_mean_3m3m(
+    start_date: str = START_DATE,
+    trim_pct: float = 10.0,
+    level3_file: str = 'level3.csv',
+) -> pd.Series:
+    """
+    Construct a Japan trimmed-mean inflation series from `level3.csv` (the
+    cleaned 647 disaggregated subindices with embedded basket weights). No
+    external data required.
+
+    Per month, components are sorted by m/m (annualised) % change and the
+    bottom and top `trim_pct`% of the basket weight are dropped; the basket-
+    weighted mean of the remaining components is the trimmed-mean inflation
+    rate. The resulting m/m-annualised series is then 3-month-MA smoothed to
+    yield a 3m/3m-equivalent benchmark series — comparable to the other 3m/3m
+    Xbm regressors. (For small log-returns, mean of 3 consecutive m/m
+    annualised rates ≈ 3m/3m annualised; exact in continuous time.)
+
+    Default `trim_pct=10` matches the Bank of Japan's 10% trimmed-mean CPI.
+    """
+    path = LEVEL_DIR / level3_file
+    raw = pd.read_csv(path, dtype=str)
+    date_col = raw.columns[0]
+    cat_cols = raw.columns[1:]
+
+    mask = raw[date_col].str.strip() == 'Weights'
+    weights = pd.to_numeric(raw.loc[mask, cat_cols].iloc[0],
+                            errors='coerce').astype(float)
+
+    data = raw.loc[~mask].copy()
+    data = data.dropna(subset=[date_col])
+    data = data[data[date_col].str.strip().astype(bool)]
+    data[date_col] = pd.to_datetime(data[date_col].str.strip(), format='%Y%m')
+    data = (data.set_index(date_col)
+                .replace('-', np.nan)
+                .apply(pd.to_numeric, errors='coerce'))
+    data.index.name = 'Date'
+
+    # drop headline aggregate so trimming is over true subcomponents only
+    drop = [c for c in (HEADLINE_COL,) if c in data.columns]
+    data = data.drop(columns=drop, errors='ignore')
+    weights = weights.drop(labels=drop, errors='ignore')
+
+    df_imp, _ = smart_impute(data, strategy='auto', verbose=False)
+    growth_mm = ((df_imp / df_imp.shift(1)) - 1.0) * 12.0 * 100.0
+
+    cols = [c for c in growth_mm.columns
+            if c in weights.index and weights[c] > 0 and np.isfinite(weights[c])]
+    G = growth_mm[cols].to_numpy()
+    w = weights.reindex(cols).to_numpy()
+    w = w / w.sum()
+
+    trim = trim_pct / 100.0
+    out = np.full(G.shape[0], np.nan)
+    for t in range(G.shape[0]):
+        valid = np.isfinite(G[t])
+        if not valid.any():
+            continue
+        g = G[t, valid]
+        wv = w[valid]
+        wv = wv / wv.sum()
+        order = np.argsort(g)
+        g_s, w_s = g[order], wv[order]
+        cum = np.cumsum(w_s)
+        keep = (cum > trim) & (cum < 1.0 - trim)
+        if keep.any():
+            ww = w_s[keep] / w_s[keep].sum()
+            out[t] = float(np.dot(ww, g_s[keep]))
+
+    tm_mm = pd.Series(out, index=growth_mm.index, name=f'Trimmed mean ({int(trim_pct)}%)')
+    tm_3m = tm_mm.rolling(3, min_periods=3).mean()
+
+    if start_date:
+        tm_3m = tm_3m[tm_3m.index >= start_date]
+    return tm_3m
 
 
 # ══════════════════════════════════════════════════════════════════════════════

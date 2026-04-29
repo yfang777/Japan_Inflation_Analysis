@@ -1,0 +1,41 @@
+\subsection{Results for Japan}
+
+We now turn to the Japanese CPI exercise, with results summarised in Table~\ref{tab:japan}. Owing to the considerably coarser disaggregation of Japan's CPI hierarchy, the analysis is restricted to two levels of disaggregation, $K=10$ (Level 1) and $K=47$ (Level 2), and to the horizons $h \in \{3, 12, 24\}$. RMSEs are normalised by the baseline $X^{\text{bm}}_t$ with intercept. To make the comparison like-for-like, the benchmark $X^{\text{bm}}_t$ and its augmented variant $X^{\text{bm}+}_t$ are estimated under the same simplex constraint as Albacore --- non-negative weights summing to unity --- so that any performance gap reflects the choice of regressors and not the absence of a sign restriction.
+
+\textsc{Forecasting Performance}. The Japanese evidence yields a sharp regime contrast that is concentrated at long horizons. In the disinflationary decade (2010m1--2019m12), both Albacore variants comfortably outperform the simple baseline at $h=12$ and $h=24$. The rank-based aggregator is particularly striking: at $h=24$, Albacore$_{\text{ranks}}$ achieves an RMSE ratio of just $0.36$ at Level 2 and $0.38$ at Level 1, more than halving the baseline's error. Albacore$_{\text{comps}}$ also performs well over this horizon range ($0.66$--$0.85$), while the augmented benchmark $X^{\text{bm}+}_t$ attains only modest gains ($0.93$--$0.95$). At the shortest horizon ($h=3$), differences compress and every model sits within $\pm 5\%$ of the baseline, consistent with the very small predictable component of three-month-ahead Japanese inflation in the deflationary regime.
+
+The post-pandemic sample tells a more nuanced story. At the shortest horizon ($h=3$), no Albacore configuration improves upon the baseline; the augmented benchmark $X^{\text{bm}+}_t$ is the only specification to outperform $X^{\text{bm}}_t$ here (RMSE $0.95$). At medium and long horizons, however, Albacore$_{\text{comps}}$ becomes competitive once again, posting $0.97$ at Level 2 for $h=12$ and $0.89$ at Level 1 for $h=24$ -- in both cases dethroning $X^{\text{bm}+}_t$, which actually \emph{worsens} relative to $X^{\text{bm}}_t$ at the longer horizons in this period (RMSE ratios of $1.08$--$1.14$). The latter inversion is suggestive: while the stricter fourth core measure was helpful during the volatile 2022--23 episode at short horizons, the simplex constraint prevents it from being meaningfully down-weighted once the disturbance fades, dragging the longer-horizon forecasts back toward an outdated trend.
+
+It is instructive to compare the two assemblage approaches directly. Albacore$_{\text{ranks}}$ dominates Albacore$_{\text{comps}}$ at the long-horizon end of the 2010s -- at $h=12$ and $h=24$ it is consistently better at both levels, suggesting that order-statistic features carry the bulk of the predictable medium-to-long-run signal when realised cross-component dispersion is small. The ranking inverts after 2020, where Albacore$_{\text{comps}}$ uniformly outperforms Albacore$_{\text{ranks}}$ across all three horizons; the cross-component dispersion that drives the post-pandemic surge is precisely the information that the rank pipeline discards. The level effect, by contrast, is mostly inframarginal: for Albacore$_{\text{ranks}}$, moving from Level 1 to Level 2 marginally improves RMSE in the 2010s and is essentially neutral in the 2020s, while for Albacore$_{\text{comps}}$ the L1$\to$L2 effect is slightly negative at $h=24$ and slightly positive elsewhere. As in the U.S. exercise, deeper hierarchies would presumably continue to help the rank pipeline -- with Japan's published levels stopping below fifty components, that ceiling remains untested.
+
+\begin{table}[ht]
+\centering
+\caption{Forecasting Performance of Albacore for Japan}
+\label{tab:japan}
+\begin{threeparttable}
+\begin{tabular}{lccccccc}
+\toprule
+ & \multicolumn{3}{c}{2010m1--2019m12} & \phantom{aa} & \multicolumn{3}{c}{2020m1--2024m12} \\
+\cmidrule{2-4} \cmidrule{6-8}
+$h \rightarrow$ & 3 & 12 & 24 & & 3 & 12 & 24 \\
+\midrule
+\multicolumn{8}{l}{\textit{Level 1} ($K = 10$)} \\
+\quad Albacore$_{\text{comps}}$ & 1.05 & 0.74 & 0.74 & & \textbf{1.40} & \textbf{1.04} & \textcolor{green!55!black}{\textbf{0.89}} \\
+\quad Albacore$_{\text{ranks}}$ & \textbf{1.02} & \textbf{0.50} & \textbf{0.38} & & 1.58 & 1.23 & 0.97 \\
+\midrule
+\multicolumn{8}{l}{\textit{Level 2} ($K = 47$)} \\
+\quad Albacore$_{\text{comps}}$ & \textbf{1.01} & 0.66 & 0.85 & & \textbf{1.28} & \textcolor{green!55!black}{\textbf{0.97}} & \textbf{0.98} \\
+\quad Albacore$_{\text{ranks}}$ & 1.02 & \textcolor{green!55!black}{\textbf{0.49}} & \textcolor{green!55!black}{\textbf{0.36}} & & 1.52 & 1.25 & 1.00 \\
+\midrule
+\multicolumn{8}{l}{\textbf{Benchmarks}} \\
+$X^{\text{bm}}_t$, $(w_0 = 0)$ & 1.00 & 1.00 & 0.99 & & 1.00 & \textbf{0.99} & \textbf{0.99} \\
+$X^{\text{bm}+}_t$ & 0.98 & 0.95 & 0.94 & & \textcolor{green!55!black}{\textbf{0.95}} & 1.14 & 1.09 \\
+$X^{\text{bm}+}_t$, $(w_0 = 0)$ & \textbf{0.97} & \textbf{0.94} & \textbf{0.93} & & 0.96 & 1.14 & 1.08 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}[flushleft]
+\footnotesize
+\item \textit{Notes:} The table presents root mean square error (RMSE) relative to the baseline $X^{\text{bm}}_t = [\text{CPI},\,\text{core}_{\text{ff}},\,\text{core}_{\text{fe}}]$ with intercept, where $\text{core}_{\text{ff}}$ is CPI excluding fresh food and $\text{core}_{\text{fe}}$ is CPI excluding food and energy. The remaining benchmarks are $X^{\text{bm}}_t$ without an intercept ($w_0 = 0$) and $X^{\text{bm}+}_t$ with and without an intercept, where ``$+$'' denotes the inclusion of CPI excluding fresh food and energy as a fourth regressor. All benchmark specifications are estimated under the same simplex constraint ($w \ge 0$, $\sum_j w_j = 1$) as the Albacore models. Numbers in \textbf{bold} indicate the best model for each \textit{level} and each \textit{horizon} in each out-of-sample period. Numbers highlighted in \textcolor{green!55!black}{green} show the best model per \textit{horizon} and out-of-sample period \textit{across all rows}. Albacore models and benchmarks both use an expanding window from 1990.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}

@@ -1,0 +1,24 @@
+\begin{table}[htbp]
+\centering
+\caption{Forecasting Performance: Albacore for Japan}
+\label{tab:horizon_table_rolling}
+\begin{tabular}{lcccccccccc}
+\toprule
+ & \multicolumn{5}{c}{2010m1--2019m12} & \multicolumn{5}{c}{2020m1--2024m12} \\
+\cmidrule(lr){2-6} \cmidrule(lr){7-11}
+$h \to$ & 1 & 3 & 6 & 12 & 24 & 1 & 3 & 6 & 12 & 24 \\
+\midrule
+\multicolumn{11}{l}{\textit{Level 1 (K=10)}} \\
+Albacorecomps & 1.43 & 1.19 & 0.97 & 0.84 & 0.84 & 1.15 & 1.20 & 1.04 & 1.03 & 1.05 \\
+Albacoreranks & 1.59 & 1.18 & 0.83 & 0.60 & 0.46 & 1.42 & 1.37 & 1.30 & 1.26 & 1.17 \\
+\multicolumn{11}{l}{\textit{Level 2 (K=47)}} \\
+Albacorecomps & 1.35 & 1.13 & 0.93 & 0.74 & 0.97 & 1.17 & 0.98 & 0.89 & 0.96 & 1.09 \\
+Albacoreranks & 1.67 & 1.17 & 0.83 & 0.60 & 0.46 & 1.39 & 1.32 & 1.31 & 1.28 & 1.20 \\
+\multicolumn{11}{l}{\textit{Benchmarks}} \\
+$X^{bm}_t$, ($w_0{=}0$) & 1.03 & 1.03 & 1.02 & 1.01 & 1.01 & 1.06 & 1.09 & 1.08 & 1.08 & 1.12 \\
+$X^{bm+}_t$ & 1.01 & 1.00 & 1.00 & 1.00 & 1.00 & 0.98 & 0.97 & 1.00 & 1.00 & 1.00 \\
+$X^{bm+}_t$, ($w_0{=}0$) & 1.02 & 1.02 & 1.02 & 1.01 & 1.01 & 0.98 & 1.02 & 1.08 & 1.08 & 1.12 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}\footnotesize\item RMSE relative to $X^{bm}_t = [\text{All items}, \text{core}_{\text{fe}}, \text{trim}_{10\%}]$, a non-negative combination with free intercept ($w \ge 0$, $\sum w = 1$). $X^{bm+}_t$ adds \textit{All items, less fresh food and energy} as a 4th regressor. $w_0 = 0$ denotes no intercept. The trimmed-mean series is constructed in-house from level3.csv (BoJ-style 10\% symmetric weighted trim). Rolling 20-year window. Standard Albacore variants from \texttt{regression/regression\_component.py} and \texttt{regression/regression\_rank.py}.\end{tablenotes}
+\end{table}

@@ -14,7 +14,8 @@ Assemblage regression for Japan CPI, following the methodology in Goulet Coulomb
 | 2 | 47 | Mid-level components (Cereals, Rent, Electricity, etc.) |
 | 3 | 744 | Granular items (Tuna, Cabbage, Gasoline, etc.) |
 
-Each level file embeds its own weights in the first row. See `data_clean/README.md` for details.
+Each level file embeds its own weights in the first row. See
+[`data_clean/data.md`](data_clean/data.md) for details.
 
 ## Directory Structure
 
@@ -24,25 +25,11 @@ Japan_Inflation_Analysis/
 ├── cpi_analysis.py              EDA and visualisation
 ├── environment.yml              Conda environment specification
 │
-├── data_clean/
-│   ├── level_1.csv              9 sectors + headline
-│   ├── level_2.csv              47 components + headline
-│   ├── level_3.csv              744 items + headline (needs column name fix)
-│   ├── level_3_column_names.csv JP-EN translation for level_3 columns
-│   └── README.md                Data format documentation
-│
-├── utils/
-│   ├── data_load.py             Level-based data loading and regression pipeline
-│   └── smart_imputation.py      Intelligent missing-value imputation
-│
-├── regression/
-│   ├── regression_component.py  Albacorecomps (component-space assemblage)
-│   ├── regression_rank.py       Albacoreranks (rank-space assemblage)
-│   ├── benchmarks.py            Naive and OLS benchmark models
-│   ├── evaluation.py            Metrics and scorecard printing
-│   └── figures.py               All regression visualisations
-│
-└── plots/                       Output figures
+├── data_clean/                  CPI panels (see data.md)
+├── utils/                       Data loading + smart imputation
+├── regression/                  Albacore models, benchmarks, horizon tables
+│                                (see regression.md)
+└── AR/                          Autoregressive baselines
 ```
 
 ## How to Run
@@ -50,21 +37,22 @@ Japan_Inflation_Analysis/
 ```bash
 # Component-space regression on level 2 (default)
 python regression/regression_component.py
-
-# Component-space regression on level 1 (9 sectors)
 python regression/regression_component.py --level 1
 
-# Rank-space regression on level 2
-python regression/regression_rank.py
+# Rank-space regression
+python regression/regression_rank.py --level 2
 
-# Rank-space regression on level 1
-python regression/regression_rank.py --level 1
+# Forecast horizon × period tables (paper protocol, rolling 20y)
+python regression/horizon_table_rolling.py
+python regression/horizon_table_correct.py
 
-# EDA and visualisation
+# EDA
 python cpi_analysis.py
 ```
 
-Each level runs independently with its own components and weights.
+Per-directory READMEs ([`data_clean/data.md`](data_clean/data.md),
+[`regression/regression.md`](regression/regression.md)) describe the data
+format, models, and command-line options in detail.
 
 ## Methodology
 
